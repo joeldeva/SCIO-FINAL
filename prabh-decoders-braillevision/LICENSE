@@ -1,0 +1,13 @@
+BrailleVision is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0),
+because it depends on Ultralytics YOLO and the ultralytics_yolo Flutter plugin (both AGPL-3.0).
+
+  Copyright (C) 2026 <Your Team Name>
+
+  This program is free software: you can redistribute it and/or modify it under the
+  terms of the GNU Affero General Public License as published by the Free Software
+  Foundation, either version 3 of the License, or (at your option) any later version.
+  This program is distributed WITHOUT ANY WARRANTY. See the GNU AGPL for details:
+  https://www.gnu.org/licenses/agpl-3.0.txt
+
+For the full text: create the GitHub repo with "Add a license -> GNU AGPL v3.0",
+or paste the text from the URL above into this file.

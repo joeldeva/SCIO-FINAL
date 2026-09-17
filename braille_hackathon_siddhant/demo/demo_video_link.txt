@@ -1,0 +1,7 @@
+# Demo Video
+
+Please paste your demo video link here once you have uploaded it to YouTube or Google Drive.
+
+Demo Video Link: [INSERT LINK HERE]
+
+Screenshots of the running application are in the `screenshots/` folder.

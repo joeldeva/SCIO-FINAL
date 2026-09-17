@@ -1,0 +1,69 @@
+**[SCREEN: Black screen. White text fades in center: "BrailleVision"]**
+
+Two point two billion people live with a vision impairment. For many, Braille is their gateway to literacy. 
+
+**[SCREEN: Show a stock image or just hold on the title card]**
+
+But for sighted teachers and parents, reading Braille is a massive challenge. To close this gap, I built BrailleVision.
+
+**[SCREEN: Open the browser. Show the BrailleVision frontend. Hold for a few seconds.]**
+
+BrailleVision is a real-time translation system. Point any camera at a Braille paper, and within milliseconds, the system decodes the characters, displays the English text, and reads it aloud.
+
+**[SCREEN: Slowly scroll down the web page to show the UI features.]**
+
+I custom-built the UI for extreme accessibility, featuring high-contrast modes, screen-reader compatibility, and full hands-free voice controls.
+
+To power this, I curated massive datasets and personally trained dozens of model iterations overnight on cloud GPUs—pushing for a 93% accuracy to ensure it handles real-world lighting right out of the box.
+
+**[SCREEN: Click the "Upload Image" tab.]**
+
+Let’s dive into a live demo. I will upload a photograph of an actual embossed Braille sheet.
+
+**[SCREEN: Click the upload zone. Select the "jai hind" Braille image. Click Open.]**
+
+Watch the results panel on the right. The system instantly processes the image and flawlessly translates it to "jai hind, india, sciobraille, visually impaired, great project"—exactly what is written on the physical paper. Every single word was decoded correctly under natural lighting. 
+
+**[SCREEN: Point your cursor to the microphone icon. Click it to activate the listener.]**
+
+Because accessibility is my core focus, users don't even need a mouse. The entire app can be controlled by voice. Let me demonstrate. 
+
+**[SCREEN: Speak clearly into your microphone: "Read translation" (or your specific trigger word)]**
+
+*(Wait 1 second for the app to register and trigger the audio)*
+
+**[SCREEN: Let the app speak the translation out loud.]**
+
+As you can see, with one simple voice command, the Braille is spoken aloud. Every detection is also saved in the history panel below.
+
+**[SCREEN: Open your Architecture Diagram image in full screen.]**
+
+Getting this to work flawlessly required an intense, custom image processing pipeline. 
+
+**[SCREEN: Point cursor to Stage 2 and Stage 3]**
+
+When the noisy image reaches my backend, I run it through an OpenCV Bilateral Filter to smooth the paper texture while keeping the Braille dots perfectly sharp. I then feed this cleaned image into my YOLOv8 foundation model using Test-Time Augmentation to catch hidden dots at multiple zoom levels.
+
+**[SCREEN: Point cursor to Stage 4]**
+
+Finally, I spatially sort the dots and run them through a custom Python autocorrection layer—a spatial spellchecker that fixes minor physical errors to guarantee perfect output.
+
+**[SCREEN: Switch to the GitHub README page, showing the "Engineering Journey & Pipeline" section.]**
+
+Building this as a solo developer was tough. Let me share the two biggest challenges I faced.
+
+First, the "Heavy Model" hallucination. Even though my massive models hit 93% accuracy, they hallucinated on physical shadows. I realized the secret wasn't a massive model—it was using a lighter foundation model paired with intense OpenCV preprocessing.
+
+Second, the flip augmentation disaster. My model kept confusing the letter "r" and "w". I realized my script was horizontally flipping images to increase dataset size. But Braille is chiral! Mirroring an "r" literally turns it into a "w". Disabling flips saved my entire project.
+
+**[SCREEN: Switch back to the browser. Show the BrailleVision frontend hero section.]**
+
+To wrap up—BrailleVision turns any camera into a voice-controlled Braille translator through an elegant hybrid pipeline of deep learning and classical computer vision.
+
+**[SCREEN: Show the README scrolled to "Future Improvements". Hold for a few seconds.]**
+
+Going forward, I plan to export the model to ONNX for on-device mobile inference, completely eliminating the backend server. 
+
+**[SCREEN: Final shot — the BrailleVision frontend with the full UI visible. Hold for 3 seconds.]**
+
+This is BrailleVision—making Braille accessible for everyone. Thank you for watching.

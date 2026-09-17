@@ -1,0 +1,25 @@
+# Model Training Information
+
+> **IMPORTANT:** This project uses a **fine-tuned YOLOv8n (Nano)** model.
+> The base model was fine-tuned on a combined dataset (Angelina Braille + DSBI).
+
+## Hyperparameters
+- **Base Model:** yolov8n.pt (YOLOv8 Nano)
+- **Epochs:** 50
+- **Image Size:** 640
+- **Batch Size:** 8 (Optimized for Colab T4 limits)
+- **Optimizer:** AdamW
+- **Dataset Caching:** False (to prevent RAM exhaustion)
+- **fliplr:** 0.0 (CRITICAL: disabled because Braille is chiral)
+- **flipud:** 0.0 (CRITICAL: disabled because Braille is chiral)
+
+## Execution Command
+To reproduce the training process locally or on Colab, run:
+`python training/train.py`
+
+## Training Results
+Training results, confusion matrix, and metric plots are stored in `training/results/`.
+Please see `results/` folder for:
+- `results.png` — mAP50 and mAP50-95 curves
+- `confusion_matrix.png`
+- `val_batch0_pred.jpg` — sample validation predictions

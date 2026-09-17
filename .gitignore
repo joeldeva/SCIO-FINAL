@@ -1,0 +1,14 @@
+# Regenerable build/cache outputs
+build/
+.gradle/
+.idea/
+.kotlin/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+.DS_Store
+
+# Local machine files
+local.properties
+*.log

@@ -1,0 +1,37 @@
+# Datasets (too large for GitHub)
+datasets/
+braille_merged/
+*.zip
+
+# Virtual environment
+venv/
+
+# Large pretrained weights (not our trained models)
+model/dotneural_pretrained.pt
+
+# TFLite (can be regenerated)
+*.tflite
+
+# Kaggle outputs (raw)
+kaggle_output_A/
+kaggle_output_B/
+kaggle_output_C/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Ultralytics runs
+runs/
+
+# Stray notebook
+*.ipynb
+*.onnx

@@ -1,0 +1,5 @@
+Put your trained weights in THIS folder and commit them (they are small):
+  best.pt       <- PyTorch weights (used by inference.py / evaluate.py / app.py)
+  best.tflite   <- mobile export (used by the Flutter app)
+A nano YOLO .pt is ~5-12 MB, so committing it makes the model instantly
+verifiable by judges (no private-access link needed). See model_info.md here.

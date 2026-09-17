@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BrailleVision — Braille to Text & Speech</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:            #070914;
+      --surface:       rgba(255, 255, 255, 0.045);
+      --surface-2:     rgba(255, 255, 255, 0.08);
+      --surface-hi:    rgba(255, 255, 255, 0.13);
+      --border:        rgba(255, 255, 255, 0.10);
+      --border-strong: rgba(255, 255, 255, 0.22);
+      --text:          #f4f6ff;
+      --text-dim:      #9aa0bd;
+      --text-faint:    #616888;
+      --accent:        #7c9bff;
+      --accent-2:      #b07bff;
+      --accent-3:      #4fd6c0;
+      --accent-grad:   linear-gradient(135deg, #7c9bff 0%, #b07bff 100%);
+      --green:         #2ee37a;
+      --amber:         #ffb547;
+      --red:           #ff4d6d;
+      --radius:        20px;
+      --radius-sm:     13px;
+      --shadow:        0 28px 60px -28px rgba(0, 0, 0, 0.85);
+      --glow-blue:     0 14px 40px -12px rgba(124, 155, 255, 0.55);
+      --logo-size:     58px;
+      --logo-gap:      16px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+      padding: 48px 20px 90px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    .aurora {
+      position: absolute;
+      inset: -20% -20% auto -20%;
+      height: 120vh;
+      z-index: -2;
+      pointer-events: none;
+      opacity: 0.7;
+      background:
+        radial-gradient(ellipse 60% 50% at 20% 20%,  rgba(91,109,255,0.55), transparent 60%),
+        radial-gradient(ellipse 55% 45% at 80% 30%,  rgba(176,107,255,0.45), transparent 60%),
+        radial-gradient(ellipse 50% 45% at 50% 85%,  rgba(46,199,184,0.40), transparent 60%);
+      will-change: transform;
+      animation: auroraDrift 28s ease-in-out infinite;
+    }
+    @keyframes auroraDrift {
+      0%,100% { transform: translate3d(0,0,0) scale(1); }
+      50%     { transform: translate3d(2%, 3%, 0) scale(1.05); }
+    }
+
+    .grid-overlay {
+      position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 46px 46px;
+      mask-image: radial-gradient(circle at 50% 30%, black, transparent 80%);
+      -webkit-mask-image: radial-gradient(circle at 50% 30%, black, transparent 80%);
+    }
+
+    .wrap { max-width: 880px; margin: 0 auto; position: relative; z-index: 1; }
+
+    .topbar { display: flex; align-items: center; gap: var(--logo-gap); margin-bottom: 8px; }
+    .logo {
+      width: var(--logo-size); height: var(--logo-size);
+      border-radius: 17px;
+      background: var(--accent-grad);
+      display: grid; place-items: center;
+      box-shadow: var(--glow-blue);
+      flex-shrink: 0;
+      position: relative;
+      animation: floaty 5s ease-in-out infinite;
+      will-change: transform;
+    }
+    @keyframes floaty { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+    .logo::after {
+      content:""; position:absolute; inset:-2px; border-radius:19px;
+      background: var(--accent-grad); filter: blur(14px); opacity:0.5; z-index:-1;
+    }
+    .logo-dots {
+      display: grid;
+      grid-template-columns: repeat(2, 9px);
+      grid-template-rows: repeat(3, 9px);
+      gap: 5px;
+    }
+    .logo-dots span { width: 9px; height: 9px; border-radius: 50%; background: #fff; }
+    .logo-dots span.off { background: rgba(255,255,255,0.32); }
+
+    h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.6rem, 4vw, 2rem);
+      letter-spacing: -0.02em;
+      margin: 0;
+      font-weight: 700;
+      background: linear-gradient(90deg, #ffffff, #c7d0ff 60%, #d9c2ff);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .tagline-badge {
+      display:inline-flex; align-items:center; gap:6px;
+      margin-top:5px; padding:3px 11px; border-radius:999px;
+      font-size:0.72rem; font-weight:600; letter-spacing:0.04em;
+      background: rgba(46,227,122,0.12); border:1px solid rgba(46,227,122,0.3);
+      color:#8ff0bb;
+    }
+    .tagline-badge .pingdot { width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green); }
+    .sub {
+      color: var(--text-dim);
+      font-size: 0.97rem;
+      margin: 6px 0 30px 0;
+      padding-left: calc(var(--logo-size) + var(--logo-gap));
+      max-width: 540px;
+      line-height: 1.5;
+    }
+
+    .tabs {
+      display: inline-flex;
+      gap: 4px;
+      padding: 6px;
+      margin-bottom: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      position: relative;
+    }
+    .tab-btn {
+      display: inline-flex; align-items: center; gap: 9px;
+      padding: 12px 26px;
+      border: none; border-radius: 11px;
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer; font-family: inherit;
+      font-size: 0.94rem; font-weight: 600;
+      transition: color 0.25s; position: relative; z-index: 1;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn[aria-selected="true"] { color: #fff; }
+    .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .tab-glider {
+      position: absolute; top: 6px; left: 6px;
+      height: calc(100% - 12px);
+      border-radius: 11px;
+      background: var(--accent-grad);
+      box-shadow: var(--glow-blue);
+      transition: transform 0.35s cubic-bezier(.65,.05,.36,1), width 0.35s cubic-bezier(.65,.05,.36,1);
+      z-index: 0;
+      will-change: transform, width;
+      opacity: 0;
+    }
+    .tab-glider.ready { opacity: 1; }
+
+    .panel { display: none; animation: fadeUp 0.45s ease; }
+    .panel.active { display: block; }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+
+    .upload-zone {
+      border: 2px dashed var(--border-strong);
+      border-radius: var(--radius);
+      padding: 3.4rem 2rem;
+      text-align: center;
+      background: var(--surface);
+      cursor: pointer;
+      transition: border-color 0.3s, background 0.3s, transform 0.25s, box-shadow 0.3s;
+      position: relative; overflow: hidden;
+    }
+    .upload-zone::before {
+      content:""; position:absolute; inset:0;
+      background: radial-gradient(460px 220px at var(--mx,50%) var(--my,0%), rgba(124,155,255,0.18), transparent 70%);
+      opacity:0; transition:opacity 0.35s; pointer-events:none;
+    }
+    .upload-zone:hover, .upload-zone[data-state="drag"] {
+      border-color: var(--accent);
+      background: var(--surface-2);
+      transform: translateY(-3px);
+      box-shadow: var(--glow-blue);
+    }
+    .upload-zone:hover::before, .upload-zone[data-state="drag"]::before { opacity:1; }
+    .upload-zone[data-state="invalid"] {
+      border-color: var(--red);
+      background: rgba(255,77,109,0.06);
+      animation: shake 0.4s ease;
+    }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      25% { transform: translateX(-6px); }
+      75% { transform: translateX(6px); }
+    }
+    .upload-zone[data-state="selected"] {
+      border-style: solid;
+      border-color: var(--accent);
+      background: var(--surface-2);
+      padding: 1.5rem;
+      text-align: left;
+    }
+
+    .upload-icon {
+      width: 72px; height: 72px; margin: 0 auto 16px;
+      border-radius: 20px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: grid; place-items: center;
+      color: var(--accent);
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+    .upload-zone:hover .upload-icon { transform: translateY(-4px) scale(1.06); box-shadow: var(--glow-blue); }
+    .upload-icon svg { width: 32px; height: 32px; }
+    .upload-zone strong { font-size: 1.1rem; font-weight: 600; display: block; letter-spacing:-0.01em; }
+    .upload-zone p { color: var(--text-faint); margin: 0.55rem 0 0; font-size: 0.86rem; }
+
+    .file-preview { display: none; align-items: center; gap: 16px; }
+    .upload-zone[data-state="selected"] .upload-default { display: none; }
+    .upload-zone[data-state="selected"] .file-preview   { display: flex; }
+    .file-thumb {
+      width: 64px; height: 64px; border-radius: 12px;
+      background: var(--surface-hi); border: 1px solid var(--border);
+      overflow: hidden; flex-shrink: 0;
+    }
+    .file-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .file-info { flex: 1; min-width: 0; }
+    .file-name {
+      font-weight: 600; font-size: 0.95rem; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .file-size { font-size: 0.78rem; color: var(--text-faint); margin-top: 3px; }
+    .file-clear {
+      background: var(--surface-hi); border: 1px solid var(--border);
+      color: var(--text); width: 32px; height: 32px; border-radius: 8px;
+      cursor: pointer; display: grid; place-items: center;
+      transition: background 0.2s, transform 0.15s;
+      flex-shrink: 0;
+    }
+    .file-clear:hover { background: rgba(255,77,109,0.2); border-color: rgba(255,77,109,0.4); }
+
+    .skeleton-card {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.7rem;
+      margin-top: 1.3rem;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .skeleton-card.visible { display: block; animation: fadeUp 0.3s ease; }
+    .skeleton-card::before {
+      content:""; position:absolute; top:0; left:0; right:0; height:3px;
+      background: var(--accent-grad); opacity:0.5;
+      animation: progressBar 1.5s ease-in-out infinite;
+    }
+    @keyframes progressBar {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .skel {
+      background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-hi) 50%, var(--surface-2) 75%);
+      background-size: 200% 100%;
+      border-radius: 8px;
+      animation: shimmer 1.4s ease-in-out infinite;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .skel-label  { width: 110px; height: 12px; margin-bottom: 16px; }
+    .skel-text   { width: 75%;   height: 36px; margin-bottom: 14px; }
+    .skel-meta   { display:flex; gap: 8px; }
+    .skel-chip   { width: 90px; height: 26px; border-radius: 999px; }
+    .skel-imgs   { display:flex; gap: 16px; margin-top: 22px; }
+    .skel-img    { flex:1; height: 140px; }
+
+    .cam-container {
+      position: relative;
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 1.1rem;
+      aspect-ratio: 16 / 10;
+      box-shadow: var(--shadow);
+    }
+    #cameraFeed { width:100%; height:100%; display:block; object-fit:cover; background:#000; }
+    #annotatedOverlay { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; display:none; }
+    .scanline {
+      position:absolute; left:0; right:0; height:120px; display:none;
+      background: linear-gradient(to bottom, transparent, rgba(124,155,255,0.22), transparent);
+      box-shadow: 0 0 24px rgba(124,155,255,0.5);
+      animation: scan 2.4s linear infinite; pointer-events:none; z-index:3;
+      will-change: top;
+    }
+    .scanline.on { display:block; }
+    @keyframes scan { 0%{top:-15%} 100%{top:100%} }
+    .cam-corners { position:absolute; inset:14px; pointer-events:none; z-index:4; display:none; }
+    .cam-corners.on { display:block; }
+    .cam-corners i {
+      position:absolute; width:26px; height:26px;
+      border:2px solid rgba(124,155,255,0.7); border-radius:3px;
+    }
+    .cam-corners i.tl{top:0;left:0;border-right:none;border-bottom:none}
+    .cam-corners i.tr{top:0;right:0;border-left:none;border-bottom:none}
+    .cam-corners i.bl{bottom:0;left:0;border-right:none;border-top:none}
+    .cam-corners i.br{bottom:0;right:0;border-left:none;border-top:none}
+
+    .cam-placeholder {
+      position:absolute; inset:0; display:grid; place-items:center; text-align:center;
+      color:var(--text-faint); gap:10px; padding:1rem;
+      background: repeating-linear-gradient(45deg, rgba(255,255,255,0.015) 0 14px, transparent 14px 28px), #060814;
+    }
+    .cam-placeholder .ph-icon { font-size:3rem; opacity:0.45; }
+    .cam-placeholder.hidden { display:none; }
+
+    .cam-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 11px;
+    }
+    .cam-controls .btn { width: 100%; justify-content: center; }
+    .btn-label { z-index: 1; position: relative; }
+    @media (max-width: 480px) {
+      .cam-controls .btn { padding: 12px 8px; }
+      .cam-controls .btn-label { display: none; }
+      .cam-controls .btn { gap: 0; }
+    }
+
+    .result-wrap {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.5s cubic-bezier(.4,0,.2,1);
+      margin-top: 1.3rem;
+    }
+    .result-wrap.open { grid-template-rows: 1fr; }
+    .result-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.7rem;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+      position: relative; overflow: hidden;
+      min-height: 0;
+    }
+    .result-box::before{
+      content:""; position:absolute; top:0; left:0; right:0; height:3px;
+      background: var(--accent-grad); opacity:0.9;
+    }
+    .result-wrap.open .result-box > * {
+      animation: fadeChild 0.4s ease both;
+    }
+    .result-wrap.open .result-box > *:nth-child(1) { animation-delay: 0.08s; }
+    .result-wrap.open .result-box > *:nth-child(2) { animation-delay: 0.14s; }
+    .result-wrap.open .result-box > *:nth-child(3) { animation-delay: 0.20s; }
+    .result-wrap.open .result-box > *:nth-child(4) { animation-delay: 0.26s; }
+    .result-wrap.open .result-box > *:nth-child(5) { animation-delay: 0.32s; }
+    .result-wrap.open .result-box > *:nth-child(6) { animation-delay: 0.38s; }
+    @keyframes fadeChild { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+    .result-label {
+      font-size:0.72rem; color:var(--text-faint);
+      text-transform:uppercase; letter-spacing:0.16em;
+      margin-bottom:0.65rem; font-weight:700;
+    }
+    .result-text {
+      font-family:'Space Grotesk', monospace;
+      font-size: clamp(1.1rem, 3.5vw, 2.2rem);
+      font-weight:700; letter-spacing: 0;
+      word-break:break-word; line-height:1.3;
+      background: linear-gradient(90deg, #ffffff, #d4dcff);
+      -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    }
+    .result-meta { font-size:0.82rem; color:var(--text-dim); margin-top:0.85rem; display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+    .chip {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 12px; border-radius:999px;
+      background:var(--surface-2); border:1px solid var(--border);
+      font-size:0.76rem; color:var(--text-dim); font-weight:500;
+      letter-spacing: 0.04em;
+      cursor: default;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+    .chip[data-clickable="true"] { cursor: pointer; }
+    .chip[data-clickable="true"]:hover {
+      background: var(--surface-hi);
+      border-color: var(--border-strong);
+      color: var(--text);
+    }
+
+    .confidence {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 4px 12px; border-radius: 999px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      font-size: 0.76rem; font-weight: 600; letter-spacing: 0.04em;
+    }
+    .conf-bar {
+      width: 60px; height: 6px; border-radius: 3px;
+      background: rgba(255,255,255,0.08); overflow: hidden; position: relative;
+    }
+    .conf-fill {
+      position: absolute; inset: 0 auto 0 0;
+      width: 0%; border-radius: 3px;
+      background: var(--green);
+      transition: width 0.8s cubic-bezier(.4,0,.2,1), background 0.3s;
+    }
+    .conf-fill.med { background: var(--amber); }
+    .conf-fill.low { background: var(--red); }
+
+    .braille-preview {
+      display: flex; gap: 10px; margin-top: 1rem; padding: 14px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow-x: auto; scroll-snap-type: x mandatory;
+    }
+    .braille-cell {
+      display: grid;
+      grid-template-columns: repeat(2, 14px);
+      grid-template-rows: repeat(3, 14px);
+      gap: 5px;
+      padding: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      flex-shrink: 0;
+      scroll-snap-align: start;
+      position: relative;
+    }
+    .braille-cell::after {
+      content: attr(data-char);
+      position: absolute;
+      bottom: -18px; left: 50%; transform: translateX(-50%);
+      font-size: 0.7rem; color: var(--text-faint); font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+    .braille-dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      transition: background 0.4s, box-shadow 0.4s, transform 0.4s;
+    }
+    .braille-dot.on {
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(124,155,255,0.7);
+      transform: scale(1.08);
+    }
+
+    .history-strip {
+      display: none;
+      gap: 10px; margin-top: 1.2rem;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding-bottom: 4px;
+    }
+    .history-strip.visible { display: flex; }
+    .history-strip::-webkit-scrollbar { height: 6px; }
+    .history-strip::-webkit-scrollbar-thumb { background: var(--surface-hi); border-radius: 3px; }
+    .history-item {
+      flex-shrink: 0; width: 180px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 8px; cursor: pointer;
+      scroll-snap-align: start;
+      transition: transform 0.2s, border-color 0.2s, background 0.2s;
+      display: flex; gap: 10px; align-items: center;
+    }
+    .history-item:hover {
+      transform: translateY(-2px); border-color: var(--accent);
+      background: var(--surface-hi);
+    }
+    .history-thumb {
+      width: 44px; height: 44px; border-radius: 8px; overflow: hidden;
+      background: var(--surface); flex-shrink: 0;
+    }
+    .history-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .history-text { flex: 1; min-width: 0; }
+    .history-text-line {
+      font-size: 0.78rem; font-weight: 600; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .history-text-time { font-size: 0.68rem; color: var(--text-faint); margin-top: 2px; }
+
+    .img-row { display:flex; gap:16px; margin-top:1.4rem; flex-wrap:wrap; }
+    .img-row > div { flex:1; min-width:190px; }
+    .img-frame { position:relative; border-radius:var(--radius-sm); overflow:hidden; border:1px solid var(--border); background:var(--surface-2); }
+    .img-row img { width:100%; display:block; min-height:100px; }
+    .img-row span {
+      font-size:0.72rem; color:var(--text-faint); display:block; text-align:center;
+      margin-top:9px; text-transform:uppercase; letter-spacing:0.1em; font-weight:600;
+    }
+
+    .live-badge {
+      display:none; align-items:center; gap:9px;
+      font-size:0.78rem; font-weight:700; letter-spacing:0.1em;
+      color:var(--red); margin-bottom:0.8rem;
+      padding:7px 14px; width:fit-content; border-radius:999px;
+      background:rgba(255,77,109,0.12); border:1px solid rgba(255,77,109,0.32);
+    }
+    .live-badge.visible { display:flex; }
+    .live-dot {
+      width:9px; height:9px; border-radius:50%; background:var(--red);
+      animation:pulse 1.3s infinite;
+    }
+    @keyframes pulse {
+      0%{box-shadow:0 0 0 0 rgba(255,77,109,0.6);opacity:1}
+      70%{box-shadow:0 0 0 9px rgba(255,77,109,0);opacity:0.6}
+      100%{box-shadow:0 0 0 0 rgba(255,77,109,0);opacity:1}
+    }
+
+    .btn {
+      display:inline-flex; align-items:center; gap:8px;
+      padding:12px 22px; border:1px solid transparent; border-radius:12px;
+      font-family:inherit; font-size:0.89rem; font-weight:600; cursor:pointer;
+      transition:transform 0.16s, box-shadow 0.22s, opacity 0.15s, background 0.2s;
+      position:relative; overflow:hidden;
+    }
+    .btn::after{
+      content:""; position:absolute; inset:0;
+      background:linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.35), transparent 70%);
+      transform:translateX(-120%); transition:transform 0.6s;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .btn > * { position: relative; z-index: 1; }
+    .btn:hover:not(:disabled)::after { transform:translateX(120%); }
+    .btn:hover:not(:disabled) { transform:translateY(-2px); }
+    .btn:active:not(:disabled) { transform:translateY(0); }
+    .btn:disabled { opacity:0.38; cursor:not-allowed; }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn-dark  { background:var(--accent-grad); color:#fff; box-shadow:var(--glow-blue); }
+    .btn-green { background:linear-gradient(135deg,#2ee37a,#16a34a); color:#062b14; box-shadow:0 12px 28px -12px rgba(46,227,122,0.5); }
+    .btn-red   { background:linear-gradient(135deg,#ff4d6d,#dc2626); color:#fff; box-shadow:0 12px 28px -12px rgba(255,77,109,0.5); }
+    .btn-plain { background:var(--surface-2); color:var(--text); border-color:var(--border); }
+    .btn-plain:hover:not(:disabled){ background:var(--surface-hi); }
+    .btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    .error {
+      color:#ffc0cb; margin-top:1rem; font-size:0.86rem;
+      display:none; align-items:center; gap:9px;
+      padding:12px 15px; border-radius:var(--radius-sm);
+      background:rgba(255,77,109,0.1); border:1px solid rgba(255,77,109,0.32);
+    }
+    .error.visible { display:flex; }
+
+    .footer { text-align:center; margin-top:42px; font-size:0.78rem; color:var(--text-faint); }
+    .footer .heart{ color:var(--accent-2); }
+
+    canvas { display:none; }
+    canvas.waveform { display: inline-block; }
+
+    .toast {
+      position:fixed; bottom:26px; left:50%;
+      transform:translateX(-50%) translateY(20px);
+      background:#13162b; color:var(--text);
+      border:1px solid var(--border);
+      backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+      padding:11px 20px; border-radius:14px; font-size:0.86rem; font-weight:500;
+      box-shadow:var(--shadow);
+      opacity:0;
+      visibility: hidden;
+      pointer-events:none;
+      transition: opacity 0.3s, transform 0.3s, visibility 0s linear 0.3s;
+      z-index:50;
+      display:flex; align-items:center; gap:10px;
+    }
+    .toast.show {
+      opacity:1;
+      visibility: visible;
+      transform:translateX(-50%) translateY(0);
+      transition: opacity 0.3s, transform 0.3s, visibility 0s linear 0s;
+    }
+    .toast .eq { display:inline-flex; gap:2px; align-items:flex-end; height:16px; }
+    .toast .eq i { width:3px; background:var(--green); border-radius:2px; animation:eq 0.9s ease-in-out infinite; }
+    .toast .eq i:nth-child(1){animation-delay:0s} .toast .eq i:nth-child(2){animation-delay:.15s}
+    .toast .eq i:nth-child(3){animation-delay:.3s} .toast .eq i:nth-child(4){animation-delay:.45s}
+    @keyframes eq { 0%,100%{height:4px} 50%{height:16px} }
+    .toast canvas.waveform {
+      width: 64px; height: 18px; vertical-align: middle;
+    }
+
+    .sr-only {
+      position: absolute; width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+
+    @media (max-width:560px){
+      body{ padding:28px 14px 70px; }
+      .sub{ padding-left: 0; }
+      .tabs{ width:100%; }
+      .tab-btn{ flex:1; justify-content:center; padding:12px 8px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="17 8 12 3 7 8"/>
+      <line x1="12" y1="3" x2="12" y2="15"/>
+    </symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+    </symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+      <circle cx="12" cy="13" r="4"/>
+    </symbol>
+    <symbol id="i-speak" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+    </symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="1 4 1 10 7 10"/>
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+    </symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="5 3 19 12 5 21 5 3"/>
+    </symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="12" height="12" rx="1"/>
+    </symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"/>
+      <line x1="6" y1="6" x2="18" y2="18"/>
+    </symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="aurora" aria-hidden="true"></div>
+<div class="grid-overlay" aria-hidden="true"></div>
+
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="logo" aria-hidden="true">
+      <div class="logo-dots">
+        <span></span><span class="off"></span>
+        <span></span><span></span>
+        <span class="off"></span><span></span>
+      </div>
+    </div>
+    <div>
+      <h1>BrailleVision</h1>
+      <span class="tagline-badge"><span class="pingdot"></span> AI Braille Recognition</span>
+    </div>
+  </div>
+  <p class="sub">Upload a Braille image — or use your live camera for real-time detection &amp; instant speech.</p>
+
+  <div class="tabs" role="tablist" id="tabs" aria-label="Detection mode">
+    <span class="tab-glider" id="tabGlider" aria-hidden="true"></span>
+    <button class="tab-btn" id="tab-upload" role="tab" aria-selected="true"  aria-controls="panel-upload" tabindex="0">
+      <svg width="16" height="16"><use href="#i-folder"/></svg> Upload Image
+    </button>
+    <button class="tab-btn" id="tab-camera" role="tab" aria-selected="false" aria-controls="panel-camera" tabindex="-1">
+      <svg width="16" height="16"><use href="#i-camera"/></svg> Live Camera
+    </button>
+  </div>
+
+  <!-- ══════════════════ UPLOAD PANEL ══════════════════ -->
+  <div class="panel active" id="panel-upload" role="tabpanel" aria-labelledby="tab-upload">
+
+    <div class="upload-zone" id="uploadZone" data-state="idle" role="button" tabindex="0"
+         aria-label="Upload Braille image. Click or drag and drop a file.">
+      <div class="upload-default">
+        <div class="upload-icon"><svg><use href="#i-upload"/></svg></div>
+        <strong>Click to choose a Braille image</strong>
+        <p>or drag &amp; drop · JPG · PNG · WEBP — max 10 MB</p>
+      </div>
+      <div class="file-preview" id="filePreview">
+        <div class="file-thumb"><img id="fileThumbImg" alt=""></div>
+        <div class="file-info">
+          <div class="file-name" id="fileName"></div>
+          <div class="file-size" id="fileSize"></div>
+        </div>
+        <button class="file-clear" id="fileClear" type="button" aria-label="Remove selected file">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" style="display:none" aria-hidden="true">
+
+    <div class="skeleton-card" id="uploadSkeleton" aria-hidden="true">
+      <div class="skel skel-label"></div>
+      <div class="skel skel-text"></div>
+      <div class="skel-meta">
+        <div class="skel skel-chip"></div>
+        <div class="skel skel-chip"></div>
+        <div class="skel skel-chip"></div>
+      </div>
+      <div class="skel-imgs">
+        <div class="skel skel-img"></div>
+        <div class="skel skel-img"></div>
+      </div>
+    </div>
+
+    <div class="error" id="uploadError" role="alert">
+      <svg width="16" height="16"><use href="#i-warn"/></svg>
+      <span id="uploadErrorMsg"></span>
+    </div>
+
+    <div class="result-wrap" id="uploadResultWrap">
+      <div class="result-box" id="uploadResult">
+        <div class="result-label">Detected Text</div>
+        <div class="result-text" id="uploadText" aria-live="polite">—</div>
+        <div class="result-meta" id="uploadMeta"></div>
+        <div class="braille-preview" id="braillePreview" aria-label="Braille pattern preview"></div>
+        <div class="img-row">
+          <div><div class="img-frame"><img id="uploadOriginal" src="" alt="Original Braille image"></div><span>Original</span></div>
+          <div><div class="img-frame"><img id="uploadAnnotated" src="" alt="Annotated detection result"></div><span>Annotated</span></div>
+        </div>
+        <div style="margin-top:1.5rem; display:flex; gap:11px; flex-wrap:wrap;">
+          <!-- FIX: unique IDs for upload panel speak/stop buttons -->
+          <button class="btn btn-green" id="btnSpeakUpload">
+            <svg><use href="#i-speak"/></svg><span class="btn-label">Speak</span>
+          </button>
+          <button class="btn btn-red" id="btnStopSpeakUpload" style="display:none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="1"/>
+            </svg>
+            <span class="btn-label">Stop</span>
+          </button>
+          <button class="btn btn-plain" id="btnCopyUpload">
+            <svg><use href="#i-copy"/></svg><span class="btn-label">Copy</span>
+          </button>
+          <button class="btn btn-plain" id="btnEnhance" style="border-color: rgba(124,155,255,0.5); color: var(--accent);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              <path d="M11 8v6M8 11h6"/>
+            </svg>
+            <span class="btn-label" id="btnEnhanceLabel">
+              Enhance &amp; Retry
+              <br>
+              <small style="font-size: 11px; opacity: 0.7; line-height: 1.3;">
+                Use only if the result<br>
+                is not accurate
+              </small>
+            </span>
+          </button>
+          <span id="enhancedBadge" style="display:none; align-items:center; gap:6px;
+            padding:4px 12px; border-radius:999px; font-size:0.76rem; font-weight:600;
+            background:rgba(124,155,255,0.15); border:1px solid rgba(124,155,255,0.4);
+            color:var(--accent);">
+            ✦ Enhanced Mode
+          </span>
+          <button class="btn btn-plain" id="btnResetUpload">
+            <svg><use href="#i-reset"/></svg><span class="btn-label">Reset</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="history-strip" id="historyStrip" aria-label="Recent detections"></div>
+
+  </div>
+
+  <!-- ══════════════════ CAMERA PANEL ══════════════════ -->
+  <div class="panel" id="panel-camera" role="tabpanel" aria-labelledby="tab-camera">
+
+    <div class="live-badge" id="liveBadge" role="status" aria-live="polite">
+      <span class="live-dot" aria-hidden="true"></span> LIVE DETECTION
+    </div>
+
+    <div class="cam-container">
+      <video id="cameraFeed" autoplay playsinline muted aria-label="Live camera feed for Braille detection"></video>
+      <img   id="annotatedOverlay" src="" alt="Annotated live detection overlay">
+      <div class="scanline" id="scanline" aria-hidden="true"></div>
+      <div class="cam-corners" id="camCorners" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
+      <div class="cam-placeholder" id="camPlaceholder">
+        <div class="ph-icon" aria-hidden="true">
+          <svg width="48" height="48" style="opacity:0.5"><use href="#i-camera"/></svg>
+        </div>
+        <div>Camera is off — press <strong>Start Camera</strong> below</div>
+      </div>
+    </div>
+
+    <canvas id="snapCanvas"></canvas>
+
+    <!-- FIX: camera controls use unique IDs btnSpeakCam / btnStopSpeakCam -->
+    <div class="cam-controls">
+      <button class="btn btn-dark"  id="startCamBtn" aria-label="Start camera">
+        <svg><use href="#i-play"/></svg><span class="btn-label">Start</span>
+      </button>
+      <button class="btn btn-red"   id="stopCamBtn"  disabled aria-label="Stop camera">
+        <svg><use href="#i-stop"/></svg><span class="btn-label">Stop</span>
+      </button>
+      <button class="btn btn-green" id="btnSpeakCam" disabled aria-label="Speak detected text">
+        <svg><use href="#i-speak"/></svg><span class="btn-label">Speak</span>
+      </button>
+      <button class="btn btn-red" id="btnStopSpeakCam" style="display:none;" aria-label="Stop speaking">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="6" y="6" width="12" height="12" rx="1"/>
+        </svg>
+        <span class="btn-label">Stop</span>
+      </button>
+    </div>
+
+    <div class="error" id="camError" role="alert">
+      <svg width="16" height="16"><use href="#i-warn"/></svg>
+      <span id="camErrorMsg"></span>
+    </div>
+
+    <div class="result-wrap" id="camResultWrap">
+      <div class="result-box" id="camResult">
+        <div class="result-label">Live Detected Text</div>
+        <div class="result-text" id="camText" aria-live="polite">—</div>
+        <div class="result-meta" id="camMeta"></div>
+        <div class="braille-preview" id="camBraillePreview" aria-label="Braille pattern preview"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">BrailleVision · Braille <span class="heart">→</span> Text <span class="heart">→</span> Speech</div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <canvas class="waveform" id="waveCanvas" width="128" height="36" aria-hidden="true"></canvas>
+  <span class="eq" id="toastEq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+  <span id="toastMsg">Speaking…</span>
+</div>
+
+<script>
+'use strict';
+let lastUploadedFile = null;
+
+/* ═══════════════════════════════════════════════════════════════
+   Braille pattern map (Grade-1 ASCII subset)
+   ═══════════════════════════════════════════════════════════════ */
+const BRAILLE_MAP = {
+  a:[1],         b:[1,2],       c:[1,4],       d:[1,4,5],     e:[1,5],
+  f:[1,2,4],     g:[1,2,4,5],   h:[1,2,5],     i:[2,4],       j:[2,4,5],
+  k:[1,3],       l:[1,2,3],     m:[1,3,4],     n:[1,3,4,5],   o:[1,3,5],
+  p:[1,2,3,4],   q:[1,2,3,4,5], r:[1,2,3,5],   s:[2,3,4],     t:[2,3,4,5],
+  u:[1,3,6],     v:[1,2,3,6],   w:[2,4,5,6],   x:[1,3,4,6],   y:[1,3,4,5,6],
+  z:[1,3,5,6],   ' ':[]
+};
+function dotsFor(char){
+  return BRAILLE_MAP[char.toLowerCase()] || null;
+}
+function renderBraillePreview(container, text){
+  container.innerHTML = '';
+  if (!text || text === '—' || text === 'No Braille detected') return;
+  text.slice(0, 24).split('').forEach(ch => {
+    const dots = dotsFor(ch);
+    if (!dots) return;
+    const cell = document.createElement('div');
+    cell.className = 'braille-cell';
+    cell.setAttribute('data-char', ch === ' ' ? '␣' : ch.toUpperCase());
+    [1,4,2,5,3,6].forEach((n, i) => {
+      const d = document.createElement('div');
+      d.className = 'braille-dot';
+      cell.appendChild(d);
+      setTimeout(() => { if (dots.includes(n)) d.classList.add('on'); }, 80 * i + 50);
+    });
+    container.appendChild(cell);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Tabs
+   ═══════════════════════════════════════════════════════════════ */
+const tabBtnUpload = document.getElementById('tab-upload');
+const tabBtnCamera = document.getElementById('tab-camera');
+const tabGlider    = document.getElementById('tabGlider');
+
+function moveGlider(btn){
+  if (!btn || !btn.offsetWidth) return;
+  tabGlider.style.width = btn.offsetWidth + 'px';
+  tabGlider.style.transform = `translateX(${btn.offsetLeft - 6}px)`;
+  tabGlider.classList.add('ready');
+}
+function getActiveTabBtn(){
+  return document.querySelector('.tab-btn[aria-selected="true"]') || tabBtnUpload;
+}
+const tabRO = new ResizeObserver(() => moveGlider(getActiveTabBtn()));
+tabRO.observe(tabBtnUpload);
+tabRO.observe(tabBtnCamera);
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => moveGlider(getActiveTabBtn()));
+}
+
+function switchTab(name){
+  const isUpload = name === 'upload';
+  tabBtnUpload.setAttribute('aria-selected', isUpload ? 'true' : 'false');
+  tabBtnCamera.setAttribute('aria-selected', isUpload ? 'false' : 'true');
+  tabBtnUpload.tabIndex = isUpload ? 0 : -1;
+  tabBtnCamera.tabIndex = isUpload ? -1 : 0;
+  document.getElementById('panel-upload').classList.toggle('active', isUpload);
+  document.getElementById('panel-camera').classList.toggle('active', !isUpload);
+  moveGlider(isUpload ? tabBtnUpload : tabBtnCamera);
+  if (isUpload) stopCamera();
+}
+tabBtnUpload.addEventListener('click', () => switchTab('upload'));
+tabBtnCamera.addEventListener('click', () => switchTab('camera'));
+[tabBtnUpload, tabBtnCamera].forEach((b, i, arr) => {
+  b.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const next = arr[(i + (e.key === 'ArrowRight' ? 1 : -1) + arr.length) % arr.length];
+      next.focus();
+      switchTab(next === tabBtnUpload ? 'upload' : 'camera');
+    }
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   Upload zone
+   ═══════════════════════════════════════════════════════════════ */
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+let pointerRAF = 0;
+uploadZone.addEventListener('pointermove', e => {
+  if (pointerRAF) return;
+  pointerRAF = requestAnimationFrame(() => {
+    const r = uploadZone.getBoundingClientRect();
+    uploadZone.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    uploadZone.style.setProperty('--my', (e.clientY - r.top) + 'px');
+    pointerRAF = 0;
+  });
+});
+
+function setZoneState(state){ uploadZone.setAttribute('data-state', state); }
+
+uploadZone.addEventListener('click', e => {
+  if (e.target.closest('.file-clear')) return;
+  if (uploadZone.dataset.state !== 'selected') fileInput.click();
+});
+uploadZone.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && uploadZone.dataset.state !== 'selected') {
+    e.preventDefault(); fileInput.click();
+  }
+});
+uploadZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  if (uploadZone.dataset.state === 'idle') setZoneState('drag');
+});
+uploadZone.addEventListener('dragleave', () => {
+  if (uploadZone.dataset.state === 'drag') setZoneState('idle');
+});
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); setZoneState('idle');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+document.getElementById('fileClear').addEventListener('click', e => {
+  e.stopPropagation(); resetUpload();
+});
+
+function formatBytes(n){
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/(1024*1024)).toFixed(2) + ' MB';
+}
+
+function handleFile(file){
+  if (!file.type.startsWith('image/')) {
+    setZoneState('invalid');
+    showUploadError('Please upload an image file.');
+    setTimeout(() => setZoneState('idle'), 600);
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    setZoneState('invalid');
+    showUploadError('File too large (max 10 MB).');
+    setTimeout(() => setZoneState('idle'), 600);
+    return;
+  }
+  hideUploadError();
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('fileThumbImg').src = e.target.result;
+    document.getElementById('uploadOriginal').src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileSize').textContent = formatBytes(file.size) + ' · ' + (file.type.split('/')[1] || 'image').toUpperCase();
+  setZoneState('selected');
+  lastUploadedFile = file;
+  processUpload(file);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Upload processing
+   ═══════════════════════════════════════════════════════════════ */
+const uploadResultWrap = document.getElementById('uploadResultWrap');
+const uploadSkeleton   = document.getElementById('uploadSkeleton');
+
+async function processUpload(file){
+  uploadResultWrap.classList.remove('open');
+  uploadSkeleton.classList.add('visible');
+  hideUploadError();
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const res  = await fetch('/predict', { method: 'POST', body: fd });
+    const data = await res.json();
+    uploadSkeleton.classList.remove('visible');
+    if (!res.ok || !data.success) {
+      showUploadError(data.detail || 'Detection failed.');
+      return;
+    }
+    populateResult({
+      textEl: document.getElementById('uploadText'),
+      metaEl: document.getElementById('uploadMeta'),
+      brailleEl: document.getElementById('braillePreview'),
+      annotatedEl: document.getElementById('uploadAnnotated'),
+      data
+    });
+    uploadResultWrap.classList.add('open');
+    addHistory(file, data);
+  } catch {
+    uploadSkeleton.classList.remove('visible');
+    showUploadError('Network error — is the server running on port 8000?');
+  }
+}
+
+function populateResult({ textEl, metaEl, brailleEl, annotatedEl, data }){
+  textEl.textContent = data.text || '—';
+  const conf = typeof data.confidence === 'number' ? data.confidence : 0.85;
+  const confPct = Math.round(conf * 100);
+  const confClass = conf >= 0.75 ? '' : (conf >= 0.5 ? 'med' : 'low');
+  metaEl.innerHTML = `
+    <span class="chip">🔠 ${data.count ?? data.text?.length ?? 0} chars</span>
+    <span class="chip">⚡ ${data.inference_ms ?? '—'} ms</span>
+    <span class="confidence" title="Detection confidence">
+      <span>Confidence</span>
+      <span class="conf-bar"><span class="conf-fill ${confClass}" style="width:${confPct}%"></span></span>
+      <span>${confPct}%</span>
+    </span>`;
+  if (brailleEl) renderBraillePreview(brailleEl, data.text || '');
+  if (annotatedEl && data.image_b64) annotatedEl.src = `data:image/jpeg;base64,${data.image_b64}`;
+}
+
+function resetUpload(){
+  uploadResultWrap.classList.remove('open');
+  fileInput.value = null;
+  document.getElementById('fileThumbImg').src  = '';
+  document.getElementById('uploadOriginal').src  = '';
+  document.getElementById('uploadAnnotated').src = '';
+  document.getElementById('fileName').textContent = '';
+  document.getElementById('fileSize').textContent = '';
+  uploadSkeleton.classList.remove('visible');
+  hideUploadError();
+  setZoneState('idle');
+  document.getElementById('enhancedBadge').style.display = 'none';
+  lastUploadedFile = null;
+}
+
+function showUploadError(msg){
+  document.getElementById('uploadErrorMsg').textContent = msg;
+  document.getElementById('uploadError').classList.add('visible');
+}
+function hideUploadError(){
+  document.getElementById('uploadError').classList.remove('visible');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   History strip
+   ═══════════════════════════════════════════════════════════════ */
+const HISTORY_KEY = 'braillevision_history';
+function loadHistory(){
+  try { return JSON.parse(sessionStorage.getItem(HISTORY_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveHistory(items){
+  try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 3))); }
+  catch {}
+}
+function addHistory(file, data){
+  const reader = new FileReader();
+  reader.onload = e => {
+    const items = loadHistory();
+    items.unshift({ thumb: e.target.result, text: data.text, time: Date.now() });
+    saveHistory(items);
+    renderHistory();
+  };
+  reader.readAsDataURL(file);
+}
+function timeAgo(ts){
+  const diff = (Date.now() - ts) / 1000;
+  if (diff < 60) return Math.floor(diff) + 's ago';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  return Math.floor(diff/3600) + 'h ago';
+}
+function renderHistory(){
+  const strip = document.getElementById('historyStrip');
+  const items = loadHistory();
+  if (!items.length) { strip.classList.remove('visible'); return; }
+  strip.innerHTML = items.map(it => `
+    <div class="history-item" data-text="${escapeHtml(it.text)}">
+      <div class="history-thumb"><img src="${it.thumb}" alt=""></div>
+      <div class="history-text">
+        <div class="history-text-line">${escapeHtml(it.text || '—')}</div>
+        <div class="history-text-time">${timeAgo(it.time)}</div>
+      </div>
+    </div>`).join('');
+  strip.classList.add('visible');
+  strip.querySelectorAll('.history-item').forEach(el => {
+    el.addEventListener('click', () => {
+      document.getElementById('uploadText').textContent = el.dataset.text;
+      renderBraillePreview(document.getElementById('braillePreview'), el.dataset.text);
+      uploadResultWrap.classList.add('open');
+    });
+  });
+}
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+renderHistory();
+
+/* ═══════════════════════════════════════════════════════════════
+   Camera mode
+   ═══════════════════════════════════════════════════════════════ */
+let stream = null, liveTimer = null, isDetecting = false, latestCamText = '';
+const FRAME_INTERVAL_MS = 600;
+
+const video   = document.getElementById('cameraFeed');
+const overlay = document.getElementById('annotatedOverlay');
+const canvas  = document.getElementById('snapCanvas');
+const ctx     = canvas.getContext('2d');
+const camResultWrap = document.getElementById('camResultWrap');
+
+document.getElementById('startCamBtn').addEventListener('click', startCamera);
+document.getElementById('stopCamBtn').addEventListener('click', stopCamera);
+
+async function startCamera(){
+  hideCamError();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width:{ideal:1280}, height:{ideal:720}, facingMode:'environment' }, audio:false
+    });
+    video.srcObject = stream;
+    await video.play();
+    document.getElementById('camPlaceholder').classList.add('hidden');
+    document.getElementById('scanline').classList.add('on');
+    document.getElementById('camCorners').classList.add('on');
+    document.getElementById('startCamBtn').disabled  = true;
+    document.getElementById('stopCamBtn').disabled   = false;
+    document.getElementById('btnSpeakCam').disabled  = false;   // FIX: correct ID
+    document.getElementById('liveBadge').classList.add('visible');
+    liveTimer = setInterval(sendFrame, FRAME_INTERVAL_MS);
+  } catch (err) {
+    showCamError('Camera access denied or unavailable: ' + err.message);
+  }
+}
+
+function stopCamera(){
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  if (stream)    { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  video.srcObject = null;
+  overlay.style.display = 'none';
+  document.getElementById('camPlaceholder').classList.remove('hidden');
+  document.getElementById('scanline').classList.remove('on');
+  document.getElementById('camCorners').classList.remove('on');
+  document.getElementById('startCamBtn').disabled  = false;
+  document.getElementById('stopCamBtn').disabled   = true;
+  document.getElementById('btnSpeakCam').disabled  = true;     // FIX: correct ID
+  document.getElementById('liveBadge').classList.remove('visible');
+  camResultWrap.classList.remove('open');
+}
+
+async function sendFrame(){
+  if (isDetecting || !stream || video.readyState < 2) return;
+  isDetecting = true;
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(async blob => {
+    const fd = new FormData();
+    fd.append('file', blob, 'frame.jpg');
+    try {
+      const res  = await fetch('/predict_frame', { method:'POST', body:fd });
+      const data = await res.json();
+      if (data.success) {
+        latestCamText = data.text;
+        populateResult({
+          textEl: document.getElementById('camText'),
+          metaEl: document.getElementById('camMeta'),
+          brailleEl: document.getElementById('camBraillePreview'),
+          annotatedEl: null,
+          data
+        });
+        if (!camResultWrap.classList.contains('open')) camResultWrap.classList.add('open');
+        overlay.src = `data:image/jpeg;base64,${data.image_b64}`;
+        overlay.style.display = 'block';
+      }
+    } catch {} finally { isDetecting = false; }
+  }, 'image/jpeg', 0.85);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TTS + Web Audio waveform
+   FIX: speak() now accepts speakBtn & stopBtn as params so it works
+        correctly for both the upload panel and camera panel.
+   ═══════════════════════════════════════════════════════════════ */
+let audioCtx = null, analyser = null, waveRAF = 0;
+const waveCanvas = document.getElementById('waveCanvas');
+const waveCtx = waveCanvas.getContext('2d');
+
+function startWaveform(){
+  if (!window.AudioContext && !window.webkitAudioContext) { fallbackEq(true); return; }
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    analyser   = audioCtx.createAnalyser();
+    analyser.fftSize = 64;
+    gain.gain.value = 0;
+    osc.type = 'sine';
+    osc.frequency.value = 220;
+    osc.connect(gain).connect(analyser);
+    analyser.connect(audioCtx.destination);
+    osc.start();
+    waveCanvas._osc  = osc;
+    waveCanvas._gain = gain;
+    fallbackEq(false);
+    drawWave();
+  } catch { fallbackEq(true); }
+}
+function stopWaveform(){
+  cancelAnimationFrame(waveRAF); waveRAF = 0;
+  if (waveCanvas._osc) { try { waveCanvas._osc.stop(); } catch{} waveCanvas._osc = null; }
+  waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+}
+function fallbackEq(showFallback){
+  document.getElementById('toastEq').style.display = showFallback ? 'inline-flex' : 'none';
+  waveCanvas.style.display = showFallback ? 'none' : 'inline-block';
+}
+function drawWave(){
+  if (!analyser) return;
+  const speaking = speechSynthesis.speaking && !speechSynthesis.paused;
+  waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+  const bars = 20, gap = 2;
+  const w = (waveCanvas.width - gap * (bars - 1)) / bars;
+  for (let i = 0; i < bars; i++) {
+    const t = performance.now() / 200 + i * 0.45;
+    const energy = speaking ? (Math.sin(t) * 0.5 + 0.5) * 0.85 + Math.random() * 0.15 : 0.05;
+    const h = Math.max(2, energy * waveCanvas.height);
+    waveCtx.fillStyle = `rgba(46, 227, 122, ${0.4 + energy * 0.6})`;
+    waveCtx.fillRect(i * (w + gap), (waveCanvas.height - h) / 2, w, h);
+  }
+  waveRAF = requestAnimationFrame(drawWave);
+}
+
+/**
+ * speak(text, speakBtn, stopBtn)
+ * Handles TTS for any panel — just pass the relevant button elements.
+ */
+function speak(text, speakBtn, stopBtn){
+  if (!text || text === '—' || text === 'No Braille detected') return;
+  speechSynthesis.cancel();
+
+  stopBtn.style.display  = 'inline-flex';
+  speakBtn.style.display = 'none';
+
+  function onDone(){
+    stopBtn.style.display  = 'none';
+    speakBtn.style.display = 'inline-flex';
+    hideToast();
+    stopWaveform();
+  }
+
+  const words = text.trim().split(/\s+/);
+  if (words.length > 1) {
+    const u   = new SpeechSynthesisUtterance(text);
+    u.rate    = 0.85;
+    u.onstart = () => { showToast('Speaking…', true); startWaveform(); };
+    u.onend   = onDone;
+    u.onerror = onDone;
+    speechSynthesis.speak(u);
+  } else {
+    const letters = words[0].split('');
+    const intro   = new SpeechSynthesisUtterance('Braille letters:');
+    intro.rate    = 0.9;
+    intro.onstart = () => { showToast('Speaking…', true); startWaveform(); };
+    speechSynthesis.speak(intro);
+    letters.forEach((letter, i) => {
+      const u   = new SpeechSynthesisUtterance(letter);
+      u.rate    = 0.75;
+      u.pitch   = 1.1;
+      if (i === letters.length - 1) { u.onend = onDone; u.onerror = onDone; }
+      speechSynthesis.speak(u);
+    });
+  }
+}
+
+function stopSpeaking(speakBtn, stopBtn){
+  speechSynthesis.cancel();
+  stopBtn.style.display  = 'none';
+  speakBtn.style.display = 'inline-flex';
+  hideToast();
+  stopWaveform();
+}
+
+function copyText(text){
+  if (!text || text === '—') return;
+  navigator.clipboard?.writeText(text).then(
+    () => showToast('Copied to clipboard', false),
+    () => showToast('Copy failed', false)
+  );
+}
+
+/* ── Upload panel button wiring ── */
+const btnSpeakUpload     = document.getElementById('btnSpeakUpload');
+const btnStopSpeakUpload = document.getElementById('btnStopSpeakUpload');
+
+btnSpeakUpload.addEventListener('click', () =>
+  speak(document.getElementById('uploadText').textContent, btnSpeakUpload, btnStopSpeakUpload)
+);
+btnStopSpeakUpload.addEventListener('click', () =>
+  stopSpeaking(btnSpeakUpload, btnStopSpeakUpload)
+);
+
+/* ── Camera panel button wiring ── */
+const btnSpeakCam     = document.getElementById('btnSpeakCam');
+const btnStopSpeakCam = document.getElementById('btnStopSpeakCam');
+
+btnSpeakCam.addEventListener('click', () =>
+  speak(latestCamText, btnSpeakCam, btnStopSpeakCam)
+);
+btnStopSpeakCam.addEventListener('click', () =>
+  stopSpeaking(btnSpeakCam, btnStopSpeakCam)
+);
+
+/* ── Other upload buttons ── */
+document.getElementById('btnCopyUpload').addEventListener('click', () =>
+  copyText(document.getElementById('uploadText').textContent)
+);
+document.getElementById('btnResetUpload').addEventListener('click', resetUpload);
+
+document.getElementById('btnEnhance').addEventListener('click', async () => {
+  if (!lastUploadedFile) return;
+  const btn   = document.getElementById('btnEnhance');
+  const label = document.getElementById('btnEnhanceLabel');
+  btn.disabled      = true;
+  label.textContent = 'Enhancing…';
+
+  uploadResultWrap.classList.remove('open');
+  uploadSkeleton.classList.add('visible');
+  hideUploadError();
+
+  const fd = new FormData();
+  fd.append('file', lastUploadedFile);
+
+  try {
+    const res  = await fetch('/predict/enhanced', { method: 'POST', body: fd });
+    const data = await res.json();
+    uploadSkeleton.classList.remove('visible');
+    if (!res.ok || !data.success) {
+      showUploadError(data.detail || 'Enhanced detection failed.');
+      return;
+    }
+    populateResult({
+      textEl:      document.getElementById('uploadText'),
+      metaEl:      document.getElementById('uploadMeta'),
+      brailleEl:   document.getElementById('braillePreview'),
+      annotatedEl: document.getElementById('uploadAnnotated'),
+      data
+    });
+    document.getElementById('enhancedBadge').style.display = 'inline-flex';
+    uploadResultWrap.classList.add('open');
+  } catch {
+    uploadSkeleton.classList.remove('visible');
+    showUploadError('Network error during enhanced detection.');
+  } finally {
+    btn.disabled      = false;
+    label.textContent = 'Enhance & Retry';
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   Toast
+   ═══════════════════════════════════════════════════════════════ */
+let toastTimer = null;
+function showToast(msg, withEq){
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  if (!withEq) {
+    document.getElementById('toastEq').style.display = 'none';
+    waveCanvas.style.display = 'none';
+  }
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  if (!withEq) toastTimer = setTimeout(hideToast, 1800);
+}
+function hideToast(){
+  const t = document.getElementById('toast');
+  t.classList.remove('show');
+  const onEnd = e => {
+    if (e.propertyName === 'opacity') {
+      stopWaveform();
+      t.removeEventListener('transitionend', onEnd);
+    }
+  };
+  t.addEventListener('transitionend', onEnd);
+}
+
+function showCamError(msg){
+  document.getElementById('camErrorMsg').textContent = msg;
+  document.getElementById('camError').classList.add('visible');
+}
+function hideCamError(){
+  document.getElementById('camError').classList.remove('visible');
+}
+</script>
+</body>
+</html>

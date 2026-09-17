@@ -1,0 +1,8 @@
+ultralytics
+opencv-python
+pyttsx3
+roboflow
+torch
+torchvision
+Pillow
+onnxruntime

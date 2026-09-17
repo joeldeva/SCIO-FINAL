@@ -1,0 +1,25 @@
+name: braillevision
+description: "BrailleVision - Real-time Braille to Text & Speech"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  camera: ^0.11.1
+  http: ^1.4.0
+  flutter_tts: ^4.2.0
+  image: ^4.5.3
+  permission_handler: ^11.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

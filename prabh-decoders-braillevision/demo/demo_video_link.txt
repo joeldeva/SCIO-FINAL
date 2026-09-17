@@ -1,0 +1,2 @@
+Demo video URL: <PASTE YOUR LINK HERE>
+(Show: real paper under the rig -> live detection -> decoded text -> speech.)

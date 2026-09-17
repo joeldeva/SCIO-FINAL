@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrailleVision Technical Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #24292e;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+        h1, h2, h3 {
+            border-bottom: 1px solid #eaecef;
+            padding-bottom: 0.3em;
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        h1 { font-size: 2em; }
+        h2 { font-size: 1.5em; }
+        h3 { font-size: 1.25em; border-bottom: none; }
+        p, ul, li {
+            margin-top: 0;
+            margin-bottom: 16px;
+        }
+        ul { padding-left: 2em; }
+        code {
+            padding: 0.2em 0.4em;
+            margin: 0;
+            font-size: 85%;
+            background-color: rgba(27,31,35,0.05);
+            border-radius: 3px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+        }
+        .highlight {
+            background-color: #f1f8ff;
+            border-left: 4px solid #0366d6;
+            padding: 10px 15px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>BrailleVision: Technical Documentation</h1>
+    <p><strong>Developed By:</strong> Solo Developer Submission</p>
+    <p><strong>Project Goal:</strong> A real-time, hands-free web application powered by a hybrid pipeline of deep learning and classical computer vision to translate physical Braille to English text and speech.</p>
+
+    <h2>1. The 4-Stage Image Processing Pipeline</h2>
+    <p>Unlike traditional OCR systems, BrailleVision is built specifically to handle the shadows, gradients, and noisy textures of physical embossed paper using a custom 4-stage pipeline:</p>
+    
+    <ul>
+        <li><strong>Stage 1 (Preprocessing):</strong> Incoming images are passed through an OpenCV Bilateral Filter (<code>cv2.bilateralFilter</code>). This mathematical filter smooths out paper grain and lighting artifacts while preserving the sharp, high-frequency edges of the physical Braille dots.</li>
+        <li><strong>Stage 2 (Test-Time Augmentation):</strong> The cleaned image is fed into a fine-tuned YOLOv8-m foundation model. Crucially, inference is run with TTA (Test-Time Augmentation) enabled, forcing the model to evaluate the image at multiple zoom scales simultaneously to catch faint or hidden dots.</li>
+        <li><strong>Stage 3 (Inference & Decoding):</strong> The YOLO model predicts bounding boxes around Braille cells and classifies them into 6-bit binary arrays, mapping the raised dot patterns directly to the English alphabet.</li>
+        <li><strong>Stage 4 (Post-Processing & Heuristics):</strong> Bounding boxes are spatially sorted to establish lines and word boundaries by measuring horizontal gaps between cells. Finally, because physical paper suffers from spatial compression, the raw string is passed through a custom Python <code>difflib</code> layer that acts as a context-aware spellchecker to correct minor character hallucinations.</li>
+    </ul>
+
+    <h2>2. Engineering Journey & Challenges</h2>
+    <div class="highlight">
+        <p><strong>Challenge 1: The "Heavy Model" Hallucination</strong></p>
+        <p>Even though the initial massive 11M+ parameter models hit 93% accuracy during training on cloud GPUs, they hallucinated wildly on physical paper due to shadows. The solution was not a larger model, but rather pivoting to a hybrid architecture: pairing a lighter foundation model with intense OpenCV classical preprocessing.</p>
+    </div>
+
+    <div class="highlight">
+        <p><strong>Challenge 2: The Flip Augmentation Disaster</strong></p>
+        <p>Early on, the model kept confusing the letter "r" and "w". The training script was automatically flipping images horizontally (<code>fliplr=0.5</code>) to artificially increase dataset size. Because Braille is chiral, mirroring an "r" literally creates a "w". Disabling all flip augmentations permanently resolved the systemic character confusion.</p>
+    </div>
+
+    <h2>3. Architecture Stack</h2>
+    <ul>
+        <li><strong>Frontend:</strong> Custom-built with HTML5, CSS3, Vanilla JavaScript, and the Canvas API. Optimized for extreme accessibility, featuring full screen-reader compatibility and hands-free Web Speech API controls.</li>
+        <li><strong>Backend API:</strong> Python 3.11, FastAPI, and Uvicorn. Exposes low-latency RESTful endpoints for real-time video translation.</li>
+        <li><strong>Machine Learning Layer:</strong> PyTorch, Ultralytics YOLOv8-m, OpenCV (Bilateral Filtering), and Google Text-to-Speech (gTTS).</li>
+    </ul>
+
+    <h2>4. Dataset Curation</h2>
+    <p>The foundation model was trained on a meticulously curated dataset of ~1,800 images, combining the Angelina Braille Dataset, the DSBI double-sided dataset, and custom Kaggle imagery. Physical test images were manually captured to tune the mathematical preprocessing and autocorrect heuristic layers.</p>
+
+</body>
+</html>

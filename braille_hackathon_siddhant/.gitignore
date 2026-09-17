@@ -1,0 +1,50 @@
+venv/
+venv_win/
+__pycache__/
+venv_win311/
+python_installer.exe
+tool_calls.txt
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Model weights (too large for git - use releases or drive link)
+backend/models/*.pt
+backend/models/*.onnx
+backend/models/*.engine
+
+# Training runs
+runs/
+*.zip
+
+# Dataset (add drive link instead)
+dataset/images/
+dataset/labels/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temp
+tmp/
+temp/

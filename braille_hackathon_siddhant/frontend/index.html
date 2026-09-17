@@ -1,0 +1,2374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrailleVision — AI-Powered Braille Recognition</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    
+    /* ============================================================
+       TAB SLIDER
+    ============================================================ */
+    .tab-slider-container {
+      width: 100%;
+      overflow: hidden;
+      position: relative;
+    }
+    .tab-slider {
+      display: flex;
+      width: 200%;
+      transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .slide-pane {
+      width: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ============================================================
+       RESET & BASE
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #000000;
+      --bg2:       #111111;
+      --bg3:       #222222;
+      --violet:    #FFD700; /* Primary Yellow */
+      --violet-l:  #FFEA00;
+      --violet-d:  #B39700;
+      --cyan:      #FFFFFF; /* Secondary White */
+      --cyan-l:    #DDDDDD;
+      --emerald:   #00FF00; /* Bright Green */
+      --rose:      #FF0000; /* Bright Red */
+      --amber:     #FFD700;
+      --white:     #FFFFFF;
+      --muted:     #AAAAAA;
+      --glass:     rgba(255,255,255,0.05);
+      --glass-h:   rgba(255,255,255,0.08);
+      --border:    rgba(255,255,255,0.10);
+      --border-v:  rgba(124,58,237,0.40);
+      --border-c:  rgba(6,182,212,0.35);
+      --radius:    16px;
+      --radius-lg: 24px;
+      --shadow-v:  0 0 40px rgba(124,58,237,0.25);
+      --shadow-c:  0 0 40px rgba(6,182,212,0.20);
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--white);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+    ::selection { background: rgba(124,58,237,0.4); color: #fff; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg2); }
+    ::-webkit-scrollbar-thumb { background: var(--violet-d); border-radius: 3px; }
+
+    /* ============================================================
+       PARTICLE CANVAS
+    ============================================================ */
+    #particle-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ============================================================
+       LAYOUT WRAPPERS
+    ============================================================ */
+    .page-wrap { position: relative; z-index: 1; }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ============================================================
+       GRADIENT UTILITIES
+    ============================================================ */
+    .grad-text {
+      background: linear-gradient(135deg, var(--violet-l) 0%, var(--cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .grad-bg {
+      background: linear-gradient(135deg, var(--violet) 0%, var(--cyan) 100%);
+    }
+
+    /* ============================================================
+       GLASS CARD
+    ============================================================ */
+    .glass {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .glass-v {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-v);
+      border-radius: var(--radius);
+    }
+    .glass-c {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-c);
+      border-radius: var(--radius);
+    }
+
+    /* ============================================================
+       HEADER
+    ============================================================ */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 0;
+      background: rgba(10,10,15,0.85);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 68px;
+    }
+    .logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--violet), var(--cyan));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 20px rgba(124,58,237,0.5);
+      flex-shrink: 0;
+    }
+    .logo-text {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .logo-tag {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+      position: relative;
+    }
+    .status-dot.online {
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+    }
+    .status-dot.online::after {
+      content: '';
+      position: absolute;
+      top: -4px; left: -4px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: rgba(16,185,129,0.3);
+      animation: ping 1.5s cubic-bezier(0,0,0.2,1) infinite;
+    }
+    .status-dot.offline { background: var(--rose); box-shadow: 0 0 8px var(--rose); }
+    @keyframes ping {
+      0%   { transform: scale(1); opacity: 1; }
+      75%, 100% { transform: scale(2); opacity: 0; }
+    }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    nav a:hover { color: var(--white); }
+    nav { display: flex; gap: 28px; }
+
+    /* ============================================================
+       HERO SECTION
+    ============================================================ */
+    .hero {
+      padding: 64px 0 48px;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(124,58,237,0.15);
+      border: 1px solid rgba(124,58,237,0.35);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--violet-l);
+      margin-bottom: 24px;
+      animation: fadeSlideUp 0.6s ease both;
+    }
+    .hero-title {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 900;
+      letter-spacing: -2px;
+      line-height: 1.05;
+      margin-bottom: 20px;
+      animation: fadeSlideUp 0.6s 0.1s ease both;
+    }
+    .hero-sub {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--muted);
+      max-width: 560px;
+      margin: 0 auto 40px;
+      font-weight: 400;
+      animation: fadeSlideUp 0.6s 0.2s ease both;
+    }
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ============================================================
+       MAIN GRID: Camera + Results
+    ============================================================ */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 24px;
+      align-items: start;
+      padding-bottom: 48px;
+    }
+    @media (max-width: 1100px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    /* --- Camera Card --- */
+    .camera-card {
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-v);
+      box-shadow: var(--shadow-v);
+    }
+    .camera-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0,0,0,0.2);
+    }
+    .cam-tab {
+      flex: 1;
+      padding: 14px 12px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      transition: all 0.25s;
+      user-select: none;
+    }
+    .cam-tab:hover { color: var(--white); background: rgba(255,255,255,0.03); }
+    .cam-tab.active {
+      color: var(--violet-l);
+      border-bottom-color: var(--violet-l);
+      background: rgba(124,58,237,0.08);
+    }
+
+    /* --- Video Container --- */
+    .video-wrap {
+      position: relative;
+      background: #000;
+      width: 100%;
+      aspect-ratio: 16/9;
+      max-height: 400px;
+      overflow: hidden;
+    }
+    #live-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    #overlay-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+    .video-glow {
+      position: absolute;
+      inset: 0;
+      border: 2px solid transparent;
+      border-radius: 0;
+      pointer-events: none;
+      background: linear-gradient(var(--bg), var(--bg)) padding-box,
+                  linear-gradient(135deg, var(--violet), var(--cyan)) border-box;
+      animation: glowPulse 3s ease-in-out infinite;
+    }
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.6; }
+      50%       { opacity: 1; }
+    }
+    .cam-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: radial-gradient(ellipse at 50% 50%, rgba(124,58,237,0.08) 0%, transparent 70%);
+    }
+    .cam-placeholder-icon {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: rgba(124,58,237,0.15);
+      border: 1px solid var(--border-v);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px;
+      animation: float 3s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-8px); }
+    }
+    .cam-placeholder p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* --- Tab Panels --- */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .camera-controls {
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-top: 1px solid var(--border);
+      background: rgba(0,0,0,0.15);
+    }
+    .detected-text-box {
+      min-height: 80px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: var(--white);
+      margin-bottom: 16px;
+      font-family: 'Courier New', monospace;
+      word-break: normal;
+      white-space: pre-wrap;
+      position: relative;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 22px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: linear-gradient(135deg, #FFD700, #FFC107);
+      color: #000;
+      box-shadow: 0 0 24px rgba(255,215,0,0.4);
+    }
+    .btn-primary:hover { box-shadow: 0 0 36px rgba(255,215,0,0.6); filter: brightness(1.1); }
+    .btn-secondary {
+      background: var(--glass);
+      color: var(--white);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--glass-h); border-color: var(--border-v); }
+    .btn-cyan {
+      background: linear-gradient(135deg, var(--cyan), #0284C7);
+      color: #fff;
+      box-shadow: 0 0 20px rgba(6,182,212,0.35);
+    }
+    .btn-cyan:hover { box-shadow: 0 0 32px rgba(6,182,212,0.55); filter: brightness(1.1); }
+    .btn-danger {
+      background: rgba(244,63,94,0.15);
+      color: var(--rose);
+      border: 1px solid rgba(244,63,94,0.3);
+    }
+    .btn-danger:hover { background: rgba(244,63,94,0.25); }
+    .btn-sm { padding: 7px 14px; font-size: 12px; border-radius: 8px; }
+    .btn-icon {
+      padding: 9px;
+      border-radius: 9px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 16px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .btn-icon:hover { background: var(--glass-h); color: var(--white); border-color: var(--border-v); }
+    .btn-icon:active { transform: scale(0.95); }
+    .rec-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--rose);
+      box-shadow: 0 0 8px var(--rose);
+      animation: blink 1s ease infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(244,63,94,0.15);
+      border: 1px solid rgba(244,63,94,0.3);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--rose);
+    }
+    .fps-counter {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* --- Upload Tab --- */
+    .upload-zone {
+      margin: 24px;
+      border: 2px dashed var(--border-v);
+      border-radius: var(--radius);
+      padding: 60px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: rgba(124,58,237,0.04);
+      position: relative;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--violet-l);
+      background: rgba(124,58,237,0.10);
+    }
+    .upload-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.7; }
+    .upload-zone h3 { font-size: 18px; margin-bottom: 8px; }
+    .upload-zone p  { color: var(--muted); font-size: 13px; }
+    #upload-input { display: none; }
+    .upload-preview {
+      display: none;
+      margin: 0 24px 24px;
+      position: relative;
+    }
+    .upload-preview img {
+      width: 100%;
+      border-radius: var(--radius);
+      max-height: 300px;
+      object-fit: contain;
+      background: #000;
+    }
+    .upload-preview .clear-btn {
+      position: absolute;
+      top: 12px; right: 12px;
+    }
+
+    /* --- Manual Braille Tab --- */
+    .manual-grid-wrap {
+      padding: 24px;
+    }
+    .manual-grid-wrap h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .manual-grid-wrap p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    .braille-letter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+      gap: 10px;
+      max-height: 360px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .braille-letter-grid::-webkit-scrollbar { width: 4px; }
+    .braille-letter-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 6px 8px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .braille-letter-cell:hover { border-color: var(--border-v); background: var(--glass-h); }
+    .braille-letter-cell.selected {
+      border-color: var(--violet-l);
+      background: rgba(124,58,237,0.15);
+      box-shadow: 0 0 12px rgba(124,58,237,0.2);
+    }
+    .braille-dot-mini {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px;
+    }
+    .braille-dot-mini .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.2);
+      transition: all 0.2s;
+    }
+    .braille-dot-mini .dot.active {
+      background: var(--violet-l);
+      border-color: var(--violet-l);
+      box-shadow: 0 0 6px rgba(124,58,237,0.6);
+    }
+    .braille-letter-cell span {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+    .manual-controls {
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .manual-result {
+      flex: 1;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      font-family: 'Courier New', monospace;
+      color: var(--violet-l);
+      min-width: 80px;
+    }
+
+    /* ============================================================
+       RESULTS PANEL
+    ============================================================ */
+    .results-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      position: sticky;
+      top: 88px;
+    }
+
+    .result-card {
+      padding: 22px;
+    }
+    .result-card-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .result-card-title .dot-accent {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--violet-l);
+    }
+
+    /* Detected text */
+    .detected-text-box {
+      min-height: 80px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: var(--white);
+      margin-bottom: 16px;
+      font-family: 'Courier New', monospace;
+      word-break: normal; white-space: pre-wrap;
+      position: relative;
+    }
+    .cursor-blink {
+      display: inline-block;
+      width: 2px;
+      height: 1.1em;
+      background: var(--violet-l);
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: cursorBlink 0.8s step-end infinite;
+    }
+    @keyframes cursorBlink { 0%,100%{opacity:1} 50%{opacity:0} }
+    .empty-text { color: var(--muted); font-size: 14px; letter-spacing: 0; font-weight: 400; font-family: 'Inter', sans-serif; }
+
+    /* Confidence ring */
+    .confidence-wrap {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 16px;
+    }
+    .conf-ring-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+    .conf-ring-svg {
+      transform: rotate(-90deg);
+    }
+    .conf-ring-bg { fill: none; stroke: rgba(255,255,255,0.08); stroke-width: 5; }
+    .conf-ring-fg {
+      fill: none;
+      stroke: url(#ringGrad);
+      stroke-width: 5;
+      stroke-linecap: round;
+      stroke-dasharray: 163;
+      stroke-dashoffset: 163;
+      transition: stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1);
+    }
+    .conf-pct {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--white);
+    }
+    .conf-info { flex: 1; }
+    .conf-label { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+    .conf-method {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .conf-method.yolo {
+      background: rgba(124,58,237,0.2);
+      border: 1px solid rgba(124,58,237,0.4);
+      color: var(--violet-l);
+    }
+    .conf-method.classical {
+      background: rgba(6,182,212,0.15);
+      border: 1px solid rgba(6,182,212,0.35);
+      color: var(--cyan-l);
+    }
+    .conf-method.none {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    /* Action buttons */
+    .action-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* History */
+    .history-list {
+      max-height: 260px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .history-list::-webkit-scrollbar { width: 4px; }
+    .history-item {
+      padding: 12px 14px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .history-item:hover { border-color: var(--border-v); background: rgba(124,58,237,0.07); }
+    .history-text {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      font-family: 'Courier New', monospace;
+      color: var(--white);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .history-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .history-conf {
+      color: var(--emerald);
+      font-weight: 600;
+    }
+    .empty-history {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .empty-history .icon { font-size: 28px; margin-bottom: 8px; }
+
+    /* ============================================================
+       STATS BAR
+    ============================================================ */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-bottom: 72px;
+    }
+    @media (max-width: 768px) {
+      .stats-bar { grid-template-columns: repeat(2, 1fr); }
+    }
+    .stat-card {
+      padding: 24px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.3s;
+    }
+    .stat-card:hover { transform: translateY(-4px); }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: -40px; left: 50%;
+      transform: translateX(-50%);
+      width: 100px; height: 100px;
+      border-radius: 50%;
+      opacity: 0.12;
+      pointer-events: none;
+    }
+    .stat-card:nth-child(1)::before { background: var(--violet); }
+    .stat-card:nth-child(2)::before { background: var(--cyan); }
+    .stat-card:nth-child(3)::before { background: var(--emerald); }
+    .stat-card:nth-child(4)::before { background: var(--amber); }
+    .stat-icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+      display: block;
+    }
+    .stat-value {
+      font-size: 38px;
+      font-weight: 900;
+      letter-spacing: -1px;
+      line-height: 1;
+      margin-bottom: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat-card:nth-child(1) .stat-value { color: var(--violet-l); }
+    .stat-card:nth-child(2) .stat-value { color: var(--cyan-l); }
+    .stat-card:nth-child(3) .stat-value { color: var(--emerald); }
+    .stat-card:nth-child(4) .stat-value { color: var(--amber); }
+    .stat-label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    /* ============================================================
+       HOW IT WORKS
+    ============================================================ */
+    .section {
+      padding: 80px 0;
+    }
+    .section-header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .section-label {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--violet-l);
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1.15;
+    }
+    .section-sub {
+      font-size: 16px;
+      color: var(--muted);
+      margin-top: 12px;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      position: relative;
+    }
+    @media (max-width: 900px) {
+      .steps-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 520px) {
+      .steps-grid { grid-template-columns: 1fr; }
+    }
+    .steps-grid::before {
+      content: '';
+      position: absolute;
+      top: 44px;
+      left: 12.5%;
+      right: 12.5%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--violet), var(--cyan), transparent);
+      pointer-events: none;
+    }
+    .step-card {
+      padding: 28px 20px 24px;
+      text-align: center;
+      position: relative;
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.6s ease, transform 0.6s ease, border-color 0.3s, box-shadow 0.3s;
+    }
+    .step-card.visible { opacity: 1; transform: translateY(0); }
+    .step-card:hover {
+      border-color: var(--border-v);
+      box-shadow: var(--shadow-v);
+    }
+    .step-num {
+      position: absolute;
+      top: -12px; left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, var(--violet), var(--cyan));
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      padding: 3px 10px;
+      border-radius: 999px;
+    }
+    .step-icon {
+      font-size: 40px;
+      margin-bottom: 16px;
+      display: block;
+      filter: drop-shadow(0 0 12px rgba(124,58,237,0.4));
+    }
+    .step-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .step-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ============================================================
+       BRAILLE REFERENCE
+    ============================================================ */
+    .ref-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 14px;
+    }
+    .ref-cell {
+      padding: 16px 12px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    .ref-cell.visible { opacity: 1; transform: scale(1); }
+    .ref-cell:hover {
+      border-color: var(--border-c);
+      transform: translateY(-4px) scale(1.03);
+      box-shadow: var(--shadow-c);
+    }
+    .ref-letter {
+      font-size: 22px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--violet-l), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+      display: block;
+    }
+    .ref-dots {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      width: 30px;
+      margin: 0 auto 8px;
+    }
+    .ref-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      transition: all 0.3s;
+    }
+    .ref-dot.on {
+      background: var(--violet-l);
+      box-shadow: 0 0 6px rgba(124,58,237,0.7);
+      border-color: var(--violet-l);
+    }
+    .ref-name {
+      font-size: 10px;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    /* ============================================================
+       SKELETON / LOADING
+    ============================================================ */
+    .skeleton {
+      background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 8px;
+    }
+    @keyframes shimmer { from{background-position:200% 0} to{background-position:-200% 0} }
+
+    /* ============================================================
+       TOAST
+    ============================================================ */
+    #toast-container {
+      position: fixed;
+      bottom: 32px;
+      right: 32px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .toast {
+      padding: 14px 20px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      backdrop-filter: blur(20px);
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      animation: toastIn 0.3s ease;
+      max-width: 320px;
+    }
+    .toast.success { border-color: rgba(16,185,129,0.4); }
+    .toast.error   { border-color: rgba(244,63,94,0.4); }
+    .toast.info    { border-color: rgba(124,58,237,0.4); }
+    @keyframes toastIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+    @keyframes toastOut { from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(20px)} }
+
+    /* ============================================================
+       FOOTER
+    ============================================================ */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 48px 0;
+      background: var(--bg2);
+    }
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+    .footer-brand .logo-text { font-size: 18px; }
+    .footer-brand p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .footer-tags {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .tag {
+      padding: 5px 12px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      transition: all 0.2s;
+    }
+    .tag:hover { color: var(--white); border-color: var(--border-v); }
+    .footer-copy {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 24px;
+      text-align: center;
+    }
+
+    /* ============================================================
+       MISC
+    ============================================================ */
+    .separator {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+      margin: 8px 0;
+    }
+    .audio-wave {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 16px;
+    }
+    .audio-wave span {
+      display: block;
+      width: 3px;
+      background: var(--emerald);
+      border-radius: 2px;
+      animation: wave 0.8s ease-in-out infinite;
+    }
+    .audio-wave span:nth-child(1){height:4px;animation-delay:0s}
+    .audio-wave span:nth-child(2){height:10px;animation-delay:0.1s}
+    .audio-wave span:nth-child(3){height:7px;animation-delay:0.2s}
+    .audio-wave span:nth-child(4){height:13px;animation-delay:0.15s}
+    .audio-wave span:nth-child(5){height:5px;animation-delay:0.05s}
+    @keyframes wave {
+      0%,100%{transform:scaleY(1)}
+      50%{transform:scaleY(1.8)}
+    }
+    .hidden { display: none !important; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .header-inner nav { display: none; }
+      .hero-title { letter-spacing: -1px; }
+    }
+    @media (max-width: 480px) {
+      .camera-tabs { flex-wrap: wrap; }
+      .cam-tab { font-size: 10px; padding: 12px 8px; }
+      .footer-inner { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================
+     PARTICLE CANVAS
+============================================================ -->
+<canvas id="particle-canvas"></canvas>
+
+<div class="page-wrap">
+
+<!-- ============================================================
+     HEADER
+============================================================ -->
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <div class="logo-wrap">
+        <div class="logo-icon"><img src="logo.png" style="width:100%;height:100%;border-radius:10px;object-fit:cover;"></div>
+        <div>
+          <div class="logo-text grad-text">BrailleVision</div>
+          <div class="logo-tag">AI Braille Recognition</div>
+        </div>
+      </div>
+      <nav>
+        <a href="#" onclick="event.preventDefault(); document.getElementById('main-slider').style.transform = 'translateX(0%)'">Detect</a>
+        <a href="#" onclick="event.preventDefault(); document.getElementById('main-slider').style.transform = 'translateX(-50%)'">How It Works</a>
+      </nav>
+      <div class="header-right">
+        <div class="status-pill" id="status-pill">
+          <div class="status-dot" id="status-dot"></div>
+          <span id="status-text">Connecting…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================
+     HERO
+============================================================ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">
+      <span>🎤</span>
+      <span>Voice Tutorial Available — Say "Tutorial"</span>
+    </div>
+    <h1 class="hero-title">
+      Read Braille with<br/><span class="grad-text">Artificial Intelligence</span>
+    </h1>
+    <p class="hero-sub">Sighted users can navigate using the interactive dashboard below, while visually challenged users can operate the entire system via voice commands.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     MAIN GRID
+============================================================ -->
+
+<div class="tab-slider-container">
+  <div class="tab-slider" id="main-slider">
+    <div class="slide-pane">
+<section id="camera-section">
+  <div class="container">
+    <div class="main-grid">
+
+      <!-- CAMERA CARD -->
+      <div class="camera-card">
+        <!-- Tabs -->
+        <div class="camera-tabs">
+          <div class="cam-tab active" data-tab="live"> Live Stream</div>
+          <div class="cam-tab" data-tab="upload">️ Upload Image</div>
+          <div class="cam-tab" data-tab="manual">⌨️ Manual Test</div>
+        </div>
+
+        <!-- ── LIVE TAB ── -->
+        <div class="tab-panel active" id="tab-live">
+            <div class="video-wrap">
+              <video id="live-video" autoplay muted playsinline></video>
+              <canvas id="overlay-canvas"></canvas>
+              <div class="cam-placeholder" id="cam-placeholder">
+              <div class="cam-placeholder-icon">📷</div>
+              <p>Click <strong>Start Camera</strong> to begin</p>
+            </div>
+          </div>
+          <div class="camera-controls">
+            <button class="btn btn-primary" id="btn-start-cam">
+              <span>▶</span> Start Camera
+            </button>
+            <button class="btn btn-danger hidden" id="btn-stop-cam">
+              <span>⏹</span> Stop
+            </button>
+            <button class="btn btn-cyan hidden" id="btn-capture">
+              <span></span> Capture
+            </button>
+            <div class="live-badge hidden" id="live-badge">
+              <div class="rec-dot"></div>
+              LIVE
+            </div>
+            <div class="fps-counter hidden" id="fps-counter">
+              0 FPS &nbsp;|&nbsp; <span id="ws-status-text">WS Disconnected</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── UPLOAD TAB ── -->
+        <div class="tab-panel" id="tab-upload">
+          <div class="upload-zone" id="upload-zone">
+            <div class="upload-icon">️</div>
+            <h3>Drop your image here</h3>
+            <p>or click to browse — PNG, JPG, WEBP supported</p>
+            <input type="file" id="upload-input" accept="image/*" />
+          </div>
+          <div class="upload-preview" id="upload-preview">
+            <img id="upload-img" src="" alt="Preview" />
+            <button class="btn btn-danger btn-sm clear-btn" id="btn-clear-upload">✕ Clear</button>
+          </div>
+          <div class="camera-controls">
+            <button class="btn btn-primary" id="btn-detect-upload">
+              <span></span> Detect Braille
+            </button>
+            <button class="btn btn-secondary" id="btn-browse">Browse File</button>
+            <div class="fps-counter" id="upload-status-text" style="margin-left:auto;color:var(--muted)"></div>
+          </div>
+        </div>
+
+        <!-- ── MANUAL TAB ── -->
+        <div class="tab-panel" id="tab-manual">
+          <div class="manual-grid-wrap">
+            <h3>Click letters to build a Braille sequence</h3>
+            <p>Each cell shows the Braille dot pattern for that letter. Select letters to compose a word.</p>
+            <div class="braille-letter-grid" id="manual-letter-grid">
+              <!-- populated by JS -->
+            </div>
+          </div>
+          <div class="manual-controls">
+            <div class="manual-result" id="manual-word">—</div>
+            <button class="btn btn-secondary btn-sm" id="btn-manual-clear">Clear</button>
+            <button class="btn btn-primary btn-sm" id="btn-manual-decode">
+              <span></span> Decode
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESULTS PANEL -->
+      <div class="results-panel">
+
+        <!-- Detected Text -->
+        <div class="result-card glass-v">
+          <div class="result-card-title">
+            <div class="dot-accent"></div>
+            Detected Text
+          </div>
+          <div class="detected-text-box" id="detected-text-box">
+            <span class="empty-text">Awaiting detection…</span>
+          </div>
+          <div class="confidence-wrap">
+            <div class="conf-ring-wrap">
+              <svg class="conf-ring-svg" width="60" height="60" viewBox="0 0 60 60">
+                <defs>
+                  <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#7C3AED"/>
+                    <stop offset="100%" stop-color="#06B6D4"/>
+                  </linearGradient>
+                </defs>
+                <circle class="conf-ring-bg" cx="30" cy="30" r="26"/>
+                <circle class="conf-ring-fg" id="conf-ring" cx="30" cy="30" r="26"/>
+              </svg>
+              <div class="conf-pct" id="conf-pct">0%</div>
+            </div>
+            <div class="conf-info">
+              <div class="conf-label">Detection Confidence</div>
+              <div class="conf-method none" id="conf-method">
+                No Detection
+              </div>
+            </div>
+          </div>
+          <div class="action-row">
+            <button class="btn btn-primary btn-sm" id="btn-speak" title="Speak detected text">
+               Speak
+            </button>
+            <button class="btn-icon btn-sm" id="btn-copy" title="Copy to clipboard">Copy</button>
+            <button class="btn-icon btn-sm" id="btn-download" title="Download as TXT">Download</button>
+            <div class="audio-wave hidden" id="audio-wave">
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div class="result-card glass">
+          <div class="result-card-title">
+            <div class="dot-accent" style="background:var(--cyan-l)"></div>
+            Detection History
+            <span style="margin-left:auto;font-size:10px;color:var(--muted)">Last 10</span>
+          </div>
+          <div class="history-list" id="history-list">
+            <div class="empty-history">
+              <div class="icon"></div>
+              No detections yet.<br/>Start the camera or upload an image.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     STATS BAR
+============================================================ -->
+<section>
+  <div class="container">
+    <div class="stats-bar">
+      <div class="stat-card glass">
+        <span class="stat-icon"></span>
+        <div class="stat-value" id="stat-detections">0</div>
+        <div class="stat-label">Total Detections</div>
+      </div>
+      <div class="stat-card glass">
+        <span class="stat-icon"></span>
+        <div class="stat-value" id="stat-avg-conf">0%</div>
+        <div class="stat-label">Avg. Confidence</div>
+      </div>
+      <div class="stat-card glass">
+        <span class="stat-icon"></span>
+        <div class="stat-value" id="stat-chars">0</div>
+        <div class="stat-label">Characters Decoded</div>
+      </div>
+      <div class="stat-card glass">
+        <span class="stat-icon">📝</span>
+        <div class="stat-value" id="stat-lines">0</div>
+        <div class="stat-label">Lines Detected</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     HOW IT WORKS
+============================================================ -->
+
+    </div>
+    <div class="slide-pane">
+<section class="section" id="how-it-works">
+  <div class="container">
+    <div class="section-header">
+      <span class="section-label">Pipeline</span>
+      <h2 class="section-title">How <span class="grad-text">BrailleVision</span> Works</h2>
+      <p class="section-sub">Four intelligent steps transform a camera frame into spoken language in real time.</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card glass" data-delay="0">
+        <div class="step-num">01</div>
+        <span class="step-icon"></span>
+        <div class="step-title">Camera Capture</div>
+        <p class="step-desc">High-resolution 1280×720 live feed captured via WebRTC, streamed as base64 frames over WebSocket at 2 FPS.</p>
+      </div>
+      <div class="step-card glass" data-delay="100">
+        <div class="step-num">02</div>
+        <span class="step-icon"></span>
+        <div class="step-title">Preprocessing</div>
+        <p class="step-desc">OpenCV CLAHE enhances contrast and adaptive thresholding isolates Braille dots even in poor lighting conditions.</p>
+      </div>
+      <div class="step-card glass" data-delay="200">
+        <div class="step-num">03</div>
+        <span class="step-icon"></span>
+        <div class="step-title">AI Detection</div>
+        <p class="step-desc">YOLOv8 nano model detects and classifies individual Braille cells with sub-100ms inference time on CPU.</p>
+      </div>
+      <div class="step-card glass" data-delay="300">
+        <div class="step-num">04</div>
+        <span class="step-icon"></span>
+        <div class="step-title">Speech Output</div>
+        <p class="step-desc">Decoded characters are assembled into words and converted to natural speech via the on-device TTS engine.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     BRAILLE REFERENCE
+============================================================ -->
+<section class="section" id="braille-ref" style="padding-top:0">
+  <div class="container">
+    <div class="section-header">
+      <span class="section-label">Reference</span>
+      <h2 class="section-title">Braille <span class="grad-text">Alphabet</span> Chart</h2>
+      <p class="section-sub">Hover any letter to see its name. Click to hear it spoken aloud.</p>
+    </div>
+    <div class="ref-grid" id="ref-grid">
+      <!-- populated by JS -->
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     FOOTER
+============================================================ -->
+
+    </div>
+  </div>
+</div>
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <div class="logo-wrap">
+          <div class="logo-icon"><img src="logo.png" style="width:100%;height:100%;border-radius:10px;object-fit:cover;"></div>
+          <div>
+            <div class="logo-text grad-text">BrailleVision</div>
+          </div>
+        </div>
+        <p style="margin-top:8px">AI-powered Braille recognition for an inclusive world.</p>
+        <p style="margin-top:4px">Built with ❤️ for <strong>the Global Accessibility Community</strong></p>
+      </div>
+      <div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Tech Stack</p>
+        <div class="footer-tags">
+          <span class="tag">YOLOv8</span>
+          <span class="tag">FastAPI</span>
+          <span class="tag">OpenCV</span>
+          <span class="tag">WebSocket</span>
+          <span class="tag">Python</span>
+          <span class="tag">WebRTC</span>
+          <span class="tag">CLAHE</span>
+          <span class="tag">TTS</span>
+        </div>
+      </div>
+    </div>
+    <div class="footer-copy">© 2025 BrailleVision · Empowering Independence</div>
+  </div>
+</footer>
+
+</div><!-- /page-wrap -->
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<!-- Audio player (hidden) -->
+<audio id="tts-audio" style="display:none"></audio>
+
+<script>
+/* ================================================================
+   CONFIGURATION
+================================================================ */
+const API_BASE = 'http://localhost:8000';
+const WS_URL   = 'ws://localhost:8000/ws/live';
+const HEALTH_INTERVAL = 3000;
+const WS_FRAME_INTERVAL = 500;
+
+/* ================================================================
+   STATE
+================================================================ */
+const state = {
+  camStream: null,
+  ws: null,
+  wsActive: false,
+  sending: false,
+  fpsFrames: 0,
+  fpsLast: performance.now(),
+  fpsVal: 0,
+  detectionHistory: [],
+  stats: { detections: 0, confSum: 0, chars: 0, lines: 0 },
+  currentText: '',
+  currentConf: 0,
+  currentMethod: '',
+  manualWord: [],
+  typewriterTimer: null,
+  uploadFile: null,
+  audioPlaying: false,
+  wsReconnectTimer: null,
+  wsReconnectDelay: 2000,
+};
+
+/* ================================================================
+   BRAILLE DATA
+================================================================ */
+// Standard Grade 1 Braille (dots 1-6 → positions in 2-col, 3-row)
+// dot positions: [d1, d2, d3, d4, d5, d6] = [top-L, mid-L, bot-L, top-R, mid-R, bot-R]
+const BRAILLE_MAP = {
+  A:[1,0,0,0,0,0], B:[1,1,0,0,0,0], C:[1,0,0,1,0,0],
+  D:[1,0,0,1,1,0], E:[1,0,0,0,1,0], F:[1,1,0,1,0,0],
+  G:[1,1,0,1,1,0], H:[1,1,0,0,1,0], I:[0,1,0,1,0,0],
+  J:[0,1,0,1,1,0], K:[1,0,1,0,0,0], L:[1,1,1,0,0,0],
+  M:[1,0,1,1,0,0], N:[1,0,1,1,1,0], O:[1,0,1,0,1,0],
+  P:[1,1,1,1,0,0], Q:[1,1,1,1,1,0], R:[1,1,1,0,1,0],
+  S:[0,1,1,1,0,0], T:[0,1,1,1,1,0], U:[1,0,1,0,0,1],
+  V:[1,1,1,0,0,1], W:[0,1,0,1,1,1], X:[1,0,1,1,0,1],
+  Y:[1,0,1,1,1,1], Z:[1,0,1,0,1,1],
+};
+
+/* ================================================================
+   DOM REFS
+================================================================ */
+const $ = id => document.getElementById(id);
+const dom = {
+  statusDot:      $('status-dot'),
+  statusText:     $('status-text'),
+  statusPill:     $('status-pill'),
+  video:          $('live-video'),
+  overlayCanvas:  $('overlay-canvas'),
+  camPlaceholder: $('cam-placeholder'),
+  btnStartCam:    $('btn-start-cam'),
+  btnStopCam:     $('btn-stop-cam'),
+  btnCapture:     $('btn-capture'),
+  liveBadge:      $('live-badge'),
+  fpsCounter:     $('fps-counter'),
+  wsStatusText:   $('ws-status-text'),
+  uploadZone:     $('upload-zone'),
+  uploadInput:    $('upload-input'),
+  uploadPreview:  $('upload-preview'),
+  uploadImg:      $('upload-img'),
+  btnClearUpload: $('btn-clear-upload'),
+  btnDetectUpload:$('btn-detect-upload'),
+  btnBrowse:      $('btn-browse'),
+  uploadStatusTxt:$('upload-status-text'),
+  manualLetterGrid:$('manual-letter-grid'),
+  manualWord:     $('manual-word'),
+  btnManualClear: $('btn-manual-clear'),
+  btnManualDecode:$('btn-manual-decode'),
+  detectedTextBox:$('detected-text-box'),
+  confRing:       $('conf-ring'),
+  confPct:        $('conf-pct'),
+  confMethod:     $('conf-method'),
+  btnSpeak:       $('btn-speak'),
+  btnCopy:        $('btn-copy'),
+  btnDownload:    $('btn-download'),
+  audioWave:      $('audio-wave'),
+  historyList:    $('history-list'),
+  refGrid:        $('ref-grid'),
+  statDetections: $('stat-detections'),
+  statAvgConf:    $('stat-avg-conf'),
+  statChars:      $('stat-chars'),
+  statLines:      $('stat-lines'),
+  ttsAudio:       $('tts-audio'),
+  toastContainer: $('toast-container'),
+};
+
+/* ================================================================
+   PARTICLES
+================================================================ */
+(function initParticles() {
+  const canvas = $('particle-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [], mouse = { x: -9999, y: -9999 };
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+
+  const COLORS = ['rgba(124,58,237,', 'rgba(6,182,212,', 'rgba(157,90,245,', 'rgba(34,211,238,'];
+  class Particle {
+    constructor() { this.reset(true); }
+    reset(init) {
+      this.x  = Math.random() * (W || 1200);
+      this.y  = init ? Math.random() * (H || 800) : (H || 800) + 10;
+      this.r  = Math.random() * 2 + 0.5;
+      this.vx = (Math.random() - 0.5) * 0.3;
+      this.vy = -(Math.random() * 0.4 + 0.1);
+      this.alpha = Math.random() * 0.5 + 0.1;
+      this.color = COLORS[Math.floor(Math.random() * COLORS.length)];
+      this.life = 0;
+      this.maxLife = Math.random() * 400 + 200;
+    }
+    update() {
+      // Mouse repel
+      const dx = this.x - mouse.x, dy = this.y - mouse.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 120) {
+        const force = (120 - dist) / 120 * 0.5;
+        this.vx += (dx / dist) * force;
+        this.vy += (dy / dist) * force;
+      }
+      this.vx *= 0.98; this.vy *= 0.98;
+      this.x += this.vx; this.y += this.vy;
+      this.life++;
+      const ratio = this.life / this.maxLife;
+      this.currentAlpha = this.alpha * Math.sin(Math.PI * ratio);
+      if (this.life >= this.maxLife || this.y < -10) this.reset(false);
+    }
+    draw() {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fillStyle = this.color + this.currentAlpha + ')';
+      ctx.fill();
+    }
+  }
+
+  for (let i = 0; i < 120; i++) particles.push(new Particle());
+
+  function loop() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of particles) { p.update(); p.draw(); }
+    // Draw connections
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 80) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(124,58,237,${0.06 * (1 - dist/80)})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+/* ================================================================
+   TOAST NOTIFICATIONS
+================================================================ */
+function showToast(msg, type = 'info', duration = 3000) {
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span>${icons[type]}</span><span>${msg}</span>`;
+  dom.toastContainer.appendChild(t);
+  setTimeout(() => {
+    t.style.animation = 'toastOut 0.3s ease forwards';
+    setTimeout(() => t.remove(), 300);
+  }, duration);
+}
+
+/* ================================================================
+   HEALTH CHECK
+================================================================ */
+async function pingHealth() {
+  try {
+    const r = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(2500) });
+    const ok = r.ok;
+    dom.statusDot.className = 'status-dot ' + (ok ? 'online' : 'offline');
+    dom.statusText.textContent = ok ? 'Backend Online' : 'Backend Error';
+  } catch {
+    dom.statusDot.className = 'status-dot offline';
+    dom.statusText.textContent = 'Backend Offline';
+  }
+}
+pingHealth();
+setInterval(pingHealth, HEALTH_INTERVAL);
+
+/* ================================================================
+   TABS
+================================================================ */
+document.querySelectorAll('.cam-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.cam-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+/* ================================================================
+   CAMERA & WEBSOCKET
+================================================================ */
+dom.btnStartCam.addEventListener('click', startCamera);
+dom.btnStopCam.addEventListener('click', stopCamera);
+dom.btnCapture.addEventListener('click', captureAndSend);
+
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' }
+    });
+    state.camStream = stream;
+    dom.video.srcObject = stream;
+    dom.video.style.display = 'block';
+    dom.camPlaceholder.style.display = 'none';
+    dom.btnStartCam.classList.add('hidden');
+    dom.btnStopCam.classList.remove('hidden');
+    dom.btnCapture.classList.remove('hidden');
+    dom.liveBadge.classList.remove('hidden');
+    dom.fpsCounter.classList.remove('hidden');
+    connectWebSocket();
+    startFpsCounter();
+    startAutoSend();
+    showToast('Camera started successfully', 'success');
+  } catch (err) {
+    showToast(`Camera error: ${err.message}`, 'error');
+  }
+}
+
+function stopCamera() {
+  if (state.camStream) {
+    state.camStream.getTracks().forEach(t => t.stop());
+    state.camStream = null;
+  }
+  dom.video.srcObject = null;
+  dom.video.style.display = 'none';
+  dom.camPlaceholder.style.display = '';
+  dom.btnStartCam.classList.remove('hidden');
+  dom.btnStopCam.classList.add('hidden');
+  dom.btnCapture.classList.add('hidden');
+  dom.liveBadge.classList.add('hidden');
+  dom.fpsCounter.classList.add('hidden');
+  clearInterval(state.autoSendInterval);
+  disconnectWebSocket();
+  clearCanvas();
+  showToast('Camera stopped', 'info');
+}
+
+function connectWebSocket() {
+  if (state.ws && state.ws.readyState <= 1) return;
+  clearTimeout(state.wsReconnectTimer);
+  try {
+    state.ws = new WebSocket(WS_URL);
+    state.ws.binaryType = 'arraybuffer';
+
+    state.ws.onopen = () => {
+      state.wsActive = true;
+      state.wsReconnectDelay = 2000;
+      dom.wsStatusText.textContent = 'WS Connected';
+      dom.wsStatusText.style.color = '#10B981';
+      showToast('WebSocket connected', 'success');
+    };
+
+    state.ws.onclose = () => {
+      state.wsActive = false;
+      dom.wsStatusText.textContent = 'WS Reconnecting…';
+      dom.wsStatusText.style.color = '';
+      if (state.camStream) scheduleWsReconnect();
+    };
+
+    state.ws.onerror = () => {
+      state.wsActive = false;
+      dom.wsStatusText.textContent = 'WS Error';
+    };
+
+    state.ws.onmessage = event => {
+      try {
+        const data = JSON.parse(event.data);
+        handleDetectionResult(data);
+        // Draw annotated frame if returned
+        if (data.annotated_frame) {
+          drawAnnotatedFrame(data.annotated_frame);
+        } else if (data.boxes) {
+          drawBoxes(data.boxes);
+        }
+      } catch (e) {
+        console.warn('WS parse error', e);
+      }
+    };
+  } catch (e) {
+    scheduleWsReconnect();
+  }
+}
+
+function scheduleWsReconnect() {
+  clearTimeout(state.wsReconnectTimer);
+  state.wsReconnectTimer = setTimeout(() => {
+    if (state.camStream) connectWebSocket();
+  }, state.wsReconnectDelay);
+  state.wsReconnectDelay = Math.min(state.wsReconnectDelay * 1.5, 15000);
+}
+
+function disconnectWebSocket() {
+  clearTimeout(state.wsReconnectTimer);
+  if (state.ws) { try { state.ws.close(); } catch {} state.ws = null; }
+  state.wsActive = false;
+}
+
+function startAutoSend() {
+  clearInterval(state.autoSendInterval);
+  state.autoSendInterval = setInterval(sendFrame, WS_FRAME_INTERVAL);
+}
+
+function sendFrame() {
+  if (!state.wsActive || state.sending || !state.camStream) return;
+  const tmpCanvas = document.createElement('canvas');
+  tmpCanvas.width  = dom.video.videoWidth  || 640;
+  tmpCanvas.height = dom.video.videoHeight || 360;
+  const ctx = tmpCanvas.getContext('2d');
+  ctx.drawImage(dom.video, 0, 0);
+  const b64 = tmpCanvas.toDataURL('image/jpeg', 0.75).split(',')[1];
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify({ frame: b64, timestamp: Date.now() }));
+    state.fpsFrames++;
+  }
+}
+
+function captureAndSend() {
+  if (!state.camStream) return;
+  sendFrame();
+  // Flash effect
+  const flash = document.createElement('div');
+  flash.style.cssText = 'position:absolute;inset:0;background:#fff;opacity:0.6;pointer-events:none;z-index:10;transition:opacity 0.4s';
+  dom.video.parentElement.appendChild(flash);
+  setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 400); }, 50);
+  showToast('Frame captured and sent', 'info');
+}
+
+/* FPS counter */
+function startFpsCounter() {
+  clearInterval(state.fpsInterval);
+  state.fpsInterval = setInterval(() => {
+    const now = performance.now();
+    const elapsed = (now - state.fpsLast) / 1000;
+    state.fpsVal = Math.round(state.fpsFrames / elapsed);
+    state.fpsFrames = 0;
+    state.fpsLast = now;
+    dom.fpsCounter.childNodes[0].textContent = state.fpsVal + ' FPS  |  ';
+  }, 1000);
+}
+
+function clearCanvas() {
+  const ctx = dom.overlayCanvas.getContext('2d');
+  ctx.clearRect(0, 0, dom.overlayCanvas.width, dom.overlayCanvas.height);
+}
+
+function drawAnnotatedFrame(b64) {
+  const img = new Image();
+  img.onload = () => {
+    const c = dom.overlayCanvas;
+    c.width  = dom.video.offsetWidth;
+    c.height = dom.video.offsetHeight;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+  };
+  img.src = 'data:image/jpeg;base64,' + b64;
+}
+
+function drawBoxes(boxes) {
+  const c = dom.overlayCanvas;
+  c.width  = dom.video.offsetWidth;
+  c.height = dom.video.offsetHeight;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  if (!boxes || !boxes.length) return;
+  const scaleX = c.width  / (dom.video.videoWidth  || 640);
+  const scaleY = c.height / (dom.video.videoHeight || 360);
+  boxes.forEach(box => {
+    const [x1, y1, x2, y2] = [box.x1*scaleX, box.y1*scaleY, box.x2*scaleX, box.y2*scaleY];
+    ctx.strokeStyle = '#7C3AED';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x1, y1, x2-x1, y2-y1);
+    if (box.label) {
+      ctx.fillStyle = 'rgba(124,58,237,0.85)';
+      ctx.fillRect(x1, y1-22, ctx.measureText(box.label).width + 12, 22);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 12px Inter, sans-serif';
+      ctx.fillText(box.label, x1+6, y1-6);
+    }
+  });
+}
+
+/* ================================================================
+   DETECTION RESULT HANDLER
+================================================================ */
+function handleDetectionResult(data) {
+  const text   = data.text   || data.detected_text || data.result || '';
+  const conf   = parseFloat(data.confidence || data.conf || 0);
+  const method = data.method || data.model || '';
+
+  if (!text) return;
+
+  state.currentText   = text;
+  state.currentConf   = conf;
+  state.currentMethod = method;
+
+  // Update UI
+  updateDetectedText(text);
+  updateConfidence(conf, method);
+  addToHistory(text, conf, method);
+  updateStats(text, conf);
+}
+
+function updateDetectedText(text) {
+  dom.detectedTextBox.textContent = text;
+}
+
+function updateConfidence(conf, method) {
+  const pct = Math.round(conf * 100);
+  const circumference = 163;
+  const offset = circumference - (pct / 100) * circumference;
+  dom.confRing.style.strokeDashoffset = offset;
+  dom.confPct.textContent = pct + '%';
+
+  dom.confMethod.className = 'conf-method ' + (method.toLowerCase().includes('yolo') ? 'yolo' : method ? 'classical' : 'none');
+  dom.confMethod.textContent = method || 'Unknown';
+  const icon = method.toLowerCase().includes('yolo') ? ' ' : method ? ' ' : '';
+  dom.confMethod.textContent = icon + (method || 'No Detection');
+}
+
+function addToHistory(text, conf, method) {
+  const entry = {
+    text, conf, method,
+    time: new Date().toLocaleTimeString(),
+    id: Date.now(),
+  };
+  state.detectionHistory.unshift(entry);
+  if (state.detectionHistory.length > 10) state.detectionHistory.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  if (!state.detectionHistory.length) {
+    dom.historyList.innerHTML = '<div class="empty-history"><div class="icon"></div>No detections yet.<br/>Start the camera or upload an image.</div>';
+    return;
+  }
+  dom.historyList.innerHTML = state.detectionHistory.map(e => `
+    <div class="history-item" data-text="${encodeURIComponent(e.text)}" data-conf="${e.conf}" data-method="${e.method}">
+      <div class="history-text">${e.text}</div>
+      <div class="history-meta">
+        <span>${e.time}</span>
+        <span class="history-conf">${Math.round(e.conf*100)}%</span>
+        <span>${e.method || 'Unknown'}</span>
+      </div>
+    </div>
+  `).join('');
+  dom.historyList.querySelectorAll('.history-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const text = decodeURIComponent(item.dataset.text);
+      const conf = parseFloat(item.dataset.conf);
+      const method = item.dataset.method;
+      updateDetectedText(text);
+      updateConfidence(conf, method);
+      state.currentText = text;
+      speakText(text);
+    });
+  });
+}
+
+function updateStats(text, conf) {
+  state.stats.detections++;
+  state.stats.confSum += conf;
+  state.stats.chars += text.replace(/\s/g, '').length;
+  animateCounter(dom.statDetections, state.stats.detections);
+  const avg = Math.round((state.stats.confSum / state.stats.detections) * 100);
+  dom.statAvgConf.textContent = avg + '%';
+  animateCounter(dom.statChars, state.stats.chars);
+}
+
+function animateCounter(el, target) {
+  const start = parseInt(el.textContent.replace(/\D/g, '')) || 0;
+  const dur = 600;
+  const t0 = performance.now();
+  function step(now) {
+    const p = Math.min((now - t0) / dur, 1);
+    const val = Math.round(start + (target - start) * easeOut(p));
+    el.textContent = val;
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+
+/* ================================================================
+   UPLOAD
+================================================================ */
+dom.uploadZone.addEventListener('click', () => dom.uploadInput.click());
+dom.btnBrowse.addEventListener('click', () => dom.uploadInput.click());
+
+dom.uploadInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) previewFile(file);
+});
+
+dom.uploadZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dom.uploadZone.classList.add('drag-over');
+});
+dom.uploadZone.addEventListener('dragleave', () => dom.uploadZone.classList.remove('drag-over'));
+dom.uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dom.uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) previewFile(file);
+  else showToast('Please drop a valid image file', 'error');
+});
+
+function previewFile(file) {
+  state.uploadFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    dom.uploadImg.src = ev.target.result;
+    dom.uploadZone.style.display = 'none';
+    dom.uploadPreview.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+dom.btnClearUpload.addEventListener('click', () => {
+  state.uploadFile = null;
+  dom.uploadImg.src = '';
+  dom.uploadZone.style.display = '';
+  dom.uploadPreview.style.display = 'none';
+  dom.uploadInput.value = '';
+  dom.uploadStatusTxt.textContent = '';
+});
+
+dom.btnDetectUpload.addEventListener('click', async () => {
+  if (!state.uploadFile) { showToast('Please select an image first', 'error'); return; }
+  dom.uploadStatusTxt.textContent = 'Detecting…';
+  dom.btnDetectUpload.disabled = true;
+  try {
+    const formData = new FormData();
+    formData.append('file', state.uploadFile);
+    const r = await fetch(`${API_BASE}/detect`, { method: 'POST', body: formData });
+    if (!r.ok) throw new Error('Detection failed: ' + r.status);
+    const data = await r.json();
+    handleDetectionResult(data);
+    if (data.annotated_image) {
+      dom.uploadImg.src = 'data:image/jpeg;base64,' + data.annotated_image;
+    }
+    dom.uploadStatusTxt.textContent = '✅ Detection complete';
+    showToast('Braille detected successfully!', 'success');
+    
+    // Auto-speak the result!
+    if (data.text) {
+      speakText(data.text);
+    }
+  } catch (e) {
+    dom.uploadStatusTxt.textContent = '❌ ' + e.message;
+    showToast(e.message, 'error');
+  }
+  dom.btnDetectUpload.disabled = false;
+});
+
+/* ================================================================
+   MANUAL BRAILLE
+================================================================ */
+function buildManualGrid() {
+  const letters = Object.keys(BRAILLE_MAP).sort();
+  dom.manualLetterGrid.innerHTML = '';
+  letters.forEach(letter => {
+    const dots = BRAILLE_MAP[letter];
+    const cell = document.createElement('div');
+    cell.className = 'braille-letter-cell';
+    cell.dataset.letter = letter;
+    const dotGrid = document.createElement('div');
+    dotGrid.className = 'braille-dot-mini';
+    // Braille cell: col1 = dots 1,2,3 (top to bottom), col2 = dots 4,5,6
+    // Render order for 2-col grid: d1, d4, d2, d5, d3, d6
+    const order = [0, 3, 1, 4, 2, 5];
+    order.forEach(i => {
+      const d = document.createElement('div');
+      d.className = 'dot' + (dots[i] ? ' active' : '');
+      dotGrid.appendChild(d);
+    });
+    const span = document.createElement('span');
+    span.textContent = letter;
+    cell.appendChild(dotGrid);
+    cell.appendChild(span);
+    cell.addEventListener('click', () => {
+      cell.classList.toggle('selected');
+      const i = state.manualWord.indexOf(letter);
+      if (i === -1) state.manualWord.push(letter);
+      else state.manualWord.splice(i, 1);
+      dom.manualWord.textContent = state.manualWord.join('') || '—';
+    });
+    dom.manualLetterGrid.appendChild(cell);
+  });
+}
+buildManualGrid();
+
+dom.btnManualClear.addEventListener('click', () => {
+  state.manualWord = [];
+  dom.manualWord.textContent = '—';
+  dom.manualLetterGrid.querySelectorAll('.braille-letter-cell').forEach(c => c.classList.remove('selected'));
+});
+
+dom.btnManualDecode.addEventListener('click', async () => {
+  if (!state.manualWord.length) { showToast('Select some letters first', 'error'); return; }
+  const word = state.manualWord.join('');
+  try {
+    const r = await fetch(`${API_BASE}/decode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ braille: word, dots: state.manualWord.map(l => BRAILLE_MAP[l]) }),
+    });
+    if (!r.ok) throw new Error('Decode error');
+    const data = await r.json();
+    handleDetectionResult({ text: data.text || word, confidence: data.confidence || 0.95, method: 'Manual/Classical' });
+  } catch {
+    // Fallback: use typed word directly
+    handleDetectionResult({ text: word, confidence: 0.95, method: 'Manual Input' });
+  }
+  showToast(`Decoded: ${word}`, 'success');
+});
+
+/* ================================================================
+   SPEAK / TTS
+================================================================ */
+dom.btnSpeak.addEventListener('click', () => speakText(state.currentText));
+
+async function speakText(text) {
+  if (!text || state.audioPlaying) return;
+  try {
+    const r = await fetch(`${API_BASE}/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (data.audio) {
+        const audio = dom.ttsAudio;
+        audio.src = 'data:audio/mp3;base64,' + data.audio;
+        audio.play();
+        state.audioPlaying = true;
+        dom.audioWave.classList.remove('hidden');
+        audio.onended = () => {
+          state.audioPlaying = false;
+          dom.audioWave.classList.add('hidden');
+        };
+        return;
+      }
+    }
+  } catch {}
+  // Fallback to Web Speech API
+  if ('speechSynthesis' in window) {
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate = 0.9; utt.pitch = 1;
+    utt.onstart = () => { state.audioPlaying = true; dom.audioWave.classList.remove('hidden'); };
+    utt.onend   = () => { state.audioPlaying = false; dom.audioWave.classList.add('hidden'); };
+    speechSynthesis.speak(utt);
+    showToast('Speaking via browser TTS', 'info');
+  } else {
+    showToast('No TTS available', 'error');
+  }
+}
+
+/* ================================================================
+   COPY & DOWNLOAD
+================================================================ */
+dom.btnCopy.addEventListener('click', () => {
+  if (!state.currentText) { showToast('Nothing to copy', 'error'); return; }
+  navigator.clipboard.writeText(state.currentText)
+    .then(() => showToast('Copied to clipboard!', 'success'))
+    .catch(() => showToast('Copy failed', 'error'));
+});
+
+dom.btnDownload.addEventListener('click', () => {
+  if (!state.currentText) { showToast('Nothing to download', 'error'); return; }
+  const blob = new Blob([state.currentText], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `braille_decoded_${Date.now()}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('Downloaded!', 'success');
+});
+
+/* ================================================================
+   BRAILLE REFERENCE CHART
+================================================================ */
+async function buildRefChart() {
+  let map = BRAILLE_MAP;
+  try {
+    const r = await fetch(`${API_BASE}/braille/reference`, { signal: AbortSignal.timeout(3000) });
+    if (r.ok) { const d = await r.json(); if (d.patterns) map = d.patterns; }
+  } catch {}
+
+  const letters = Object.keys(map).sort();
+  dom.refGrid.innerHTML = '';
+  letters.forEach((letter, idx) => {
+    const dots = map[letter];
+    const cell = document.createElement('div');
+    cell.className = 'ref-cell glass';
+    // Braille dot grid (2-col, 3-row)
+    const order = [0, 3, 1, 4, 2, 5];
+    const dotsHtml = order.map(i => `<div class="ref-dot${dots[i] ? ' on' : ''}"></div>`).join('');
+    cell.innerHTML = `
+      <span class="ref-letter">${letter}</span>
+      <div class="ref-dots">${dotsHtml}</div>
+      <div class="ref-name">${letter}</div>
+    `;
+    cell.title = `Letter ${letter} — click to hear`;
+    cell.addEventListener('click', () => speakText(letter));
+    dom.refGrid.appendChild(cell);
+
+    // Staggered reveal via intersection observer
+    setTimeout(() => {
+      if (cell.classList.contains('visible')) return;
+      const io = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) {
+          cell.style.transitionDelay = (idx % 13) * 40 + 'ms';
+          cell.classList.add('visible');
+          io.disconnect();
+        }
+      }, { threshold: 0.1 });
+      io.observe(cell);
+    }, 0);
+  });
+}
+buildRefChart();
+
+/* ================================================================
+   SCROLL ANIMATIONS (Intersection Observer)
+================================================================ */
+const scrollObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const el = entry.target;
+      const delay = el.dataset.delay || 0;
+      setTimeout(() => el.classList.add('visible'), parseInt(delay));
+      scrollObserver.unobserve(el);
+    }
+  });
+}, { threshold: 0.15 });
+
+document.querySelectorAll('.step-card').forEach(el => scrollObserver.observe(el));
+
+/* ================================================================
+   SMOOTH SCROLL FOR NAV LINKS
+================================================================ */
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+
+/* ================================================================
+   RESIZE OVERLAY CANVAS
+================================================================ */
+function syncCanvasSize() {
+  const rect = dom.video.getBoundingClientRect();
+  dom.overlayCanvas.width  = rect.width;
+  dom.overlayCanvas.height = rect.height;
+}
+window.addEventListener('resize', syncCanvasSize);
+dom.video.addEventListener('loadedmetadata', syncCanvasSize);
+
+/* ================================================================
+   KEYBOARD SHORTCUTS
+================================================================ */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'c' && !e.ctrlKey) { if (state.camStream) captureAndSend(); }
+  if (e.key === 's') speakText(state.currentText);
+  if (e.key === 'Escape') { if (state.camStream) stopCamera(); }
+});
+
+/* ================================================================
+   DEMO / FALLBACK DATA (for when backend is offline)
+================================================================ */
+// After 5s, if no detection happened, show demo data
+setTimeout(() => {
+  if (state.stats.detections === 0) {
+    handleDetectionResult({
+      text: 'HELLO',
+      confidence: 0.94,
+      method: 'Demo Mode',
+    });
+  }
+}, 5000);
+
+console.log(
+  '%c BrailleVision ️ ',
+  'background: linear-gradient(135deg, #7C3AED, #06B6D4); color: white; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: bold;',
+  '\nAPI:', API_BASE, '\nWS:', WS_URL
+);
+
+/* ================================================================
+   ACCESSIBILITY: SEMANTIC VOICE COMMANDS
+================================================================ */
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SpeechRecognition) {
+  const recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+
+  // UI indicator
+  const voiceIndicator = document.createElement('div');
+  voiceIndicator.style.cssText = 'position:fixed; bottom:20px; right:20px; background:#FFD700; color:#000; padding:12px 24px; border-radius:30px; font-weight:bold; font-size:16px; z-index:9999; box-shadow: 0 0 20px rgba(255,215,0,0.5); border: 2px solid #000; display:flex; align-items:center; gap:8px; cursor:pointer;';
+  voiceIndicator.innerHTML = '<span style="font-size:20px">🎤</span> Voice Commands: Listening';
+  document.body.appendChild(voiceIndicator);
+
+  // Add Tutorial Audio Button to Top Nav
+  const topNav = document.querySelector('.top-nav');
+  if(topNav) {
+      const tutBtn = document.createElement('button');
+      tutBtn.className = 'btn btn-primary';
+      tutBtn.innerHTML = '🔊 Play Tutorial';
+      tutBtn.style.marginRight = 'auto';
+      tutBtn.onclick = () => speakText("Welcome to Braille Vision. Say 'Start Scan' to open your camera and read braille documents. Say 'Stop Scan' to close the camera. The system will automatically read detected text out loud.");
+      topNav.insertBefore(tutBtn, topNav.firstChild);
+  }
+
+  recognition.onresult = (event) => {
+    const lastResult = event.results[event.results.length - 1];
+    const command = lastResult[0].transcript.trim().toLowerCase();
+    
+    // Flash indicator
+    voiceIndicator.style.background = '#FFFFFF';
+    setTimeout(() => voiceIndicator.style.background = '#FFD700', 300);
+
+    if (command.includes('start scan') || command.includes('open camera')) {
+      showToast('Voice Command: Starting camera...', 'success');
+      const liveTab = document.querySelector('.cam-tab[data-tab="live"]');
+      if (liveTab) liveTab.click();
+      startCamera();
+    } 
+    else if (command.includes('stop scan') || command.includes('close camera')) {
+      showToast('Voice Command: Stopping camera...', 'success');
+      stopCamera();
+    }
+    else if (command.includes('tutorial') || command.includes('help')) {
+      showToast('Voice Command: Playing tutorial...', 'success');
+      speakText("Welcome to Braille Vision. Say 'Start Scan' to open your camera and read braille documents. Say 'Stop Scan' to close the camera. The system will automatically read detected text out loud.");
+    }
+    else if (command.includes('upload') || command.includes('browse')) {
+      showToast('Voice Command: Opening file browser...', 'success');
+      const uploadTab = document.querySelector('.cam-tab[data-tab="upload"]');
+      if (uploadTab) uploadTab.click();
+      if (dom.uploadInput) dom.uploadInput.click();
+    }
+    else if (command.includes('read') || command.includes('detect')) {
+      showToast('Voice Command: Detecting Braille...', 'success');
+      if (dom.btnDetectUpload) dom.btnDetectUpload.click();
+    }
+  };
+
+  recognition.onend = () => {
+    recognition.start(); // Auto-restart
+  };
+  
+  try {
+    recognition.start();
+  } catch(e) {}
+}
+</script></body></html>

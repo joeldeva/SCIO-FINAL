@@ -1,0 +1,36 @@
+BrailleVision — Training Report
+==================================================
+Generated  : 2026-05-31T18:34:43.297596
+Model      : /content/yolov8_braille.pt
+Image size : 640
+TTA        : False
+
+phase1
+------------------------------
+  imgsz=640
+    map50       : 0.9776
+    map50_95    : 0.7562
+    precision   : 0.9427
+    recall      : 0.9671
+  imgsz=800
+    map50       : 0.9743
+    map50_95    : 0.7392
+    precision   : 0.9439
+    recall      : 0.9575
+
+phase2
+------------------------------
+  imgsz=640
+    map50       : 0.9798
+    map50_95    : 0.7706
+    precision   : 0.9426
+    recall      : 0.976
+  imgsz=800
+    map50       : 0.9744
+    map50_95    : 0.7554
+    precision   : 0.9409
+    recall      : 0.9644
+
+Weak letters (AP < 0.95):
+  F = 0.9407
+  J = 0.8852
