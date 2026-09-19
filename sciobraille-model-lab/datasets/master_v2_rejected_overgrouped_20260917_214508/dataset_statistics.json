@@ -1,0 +1,120 @@
+{
+  "version": 2,
+  "canonical_classes": {
+    "0": "a",
+    "1": "b",
+    "2": "c",
+    "3": "d",
+    "4": "e",
+    "5": "f",
+    "6": "g",
+    "7": "h",
+    "8": "i",
+    "9": "j",
+    "10": "k",
+    "11": "l",
+    "12": "m",
+    "13": "n",
+    "14": "o",
+    "15": "p",
+    "16": "q",
+    "17": "r",
+    "18": "s",
+    "19": "t",
+    "20": "u",
+    "21": "v",
+    "22": "w",
+    "23": "x",
+    "24": "y",
+    "25": "z"
+  },
+  "candidate_images": 5001,
+  "valid_candidates_before_deduplication": 5001,
+  "invalid_candidates": 0,
+  "invalid_images": 0,
+  "usable_unique_images": 826,
+  "total_bounding_boxes": 75653,
+  "exact_duplicate_images_removed": 832,
+  "near_or_capture_duplicate_images_removed": 3343,
+  "duplicate_groups": 826,
+  "external_benchmark_groups_excluded": 0,
+  "split_counts": {
+    "train": 660,
+    "val": 79,
+    "test": 87
+  },
+  "split_percentages": {
+    "train": 0.7990314769975787,
+    "val": 0.09564164648910412,
+    "test": 0.1053268765133172
+  },
+  "source_contribution": {
+    "prabh_braille_merged": 515,
+    "sangam_braillie": 86,
+    "asmitha": 225
+  },
+  "class_distribution": {
+    "a": 7381,
+    "b": 1761,
+    "c": 1057,
+    "d": 3086,
+    "e": 6649,
+    "f": 645,
+    "g": 1621,
+    "h": 1178,
+    "i": 5282,
+    "j": 992,
+    "k": 3301,
+    "l": 4078,
+    "m": 2622,
+    "n": 4491,
+    "o": 7331,
+    "p": 2363,
+    "q": 1047,
+    "r": 3686,
+    "s": 4313,
+    "t": 4962,
+    "u": 2379,
+    "v": 305,
+    "w": 2937,
+    "x": 374,
+    "y": 688,
+    "z": 1124
+  },
+  "polygon_rows_converted_in_retained_images": 457,
+  "deduplication_links": {
+    "exact_links": 832,
+    "capture_links": 658,
+    "near_links": 2685
+  },
+  "source_discovery": [
+    {
+      "data_yaml": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\prabh-decoders-braillevision\\dataset\\braille_merged\\data.yaml",
+      "status": "included",
+      "detail": "1614 candidate images"
+    },
+    {
+      "data_yaml": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sangam-Braillie\\dataset\\data.yaml",
+      "status": "included",
+      "detail": "2062 candidate images"
+    },
+    {
+      "data_yaml": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\asmitha\\dataset\\data.yaml",
+      "status": "included",
+      "detail": "1325 candidate images"
+    },
+    {
+      "data_yaml": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\braille_hackathon_siddhant\\dataset\\data.yaml",
+      "status": "not_usable",
+      "detail": "images=14, labels=0, unsupported_mapping=0"
+    }
+  ],
+  "deduplication_policy": {
+    "exact": "SHA256 equality",
+    "capture": "same normalized original filename within source",
+    "near": "aspect ratio within 8%; pHash/dHash conservative joint thresholds",
+    "retention": "one highest-quality representative per connected duplicate/capture group"
+  },
+  "split_policy": "deterministic group hash; 80% train, 10% val, 10% internal test",
+  "external_benchmark_policy": "exact benchmark overlaps and their full duplicate group are excluded"
+}

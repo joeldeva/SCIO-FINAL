@@ -61,10 +61,16 @@ def preprocess(img, bilateral_d=9, bilateral_sigma=75):
     return cv2.bilateralFilter(img, bilateral_d, bilateral_sigma, bilateral_sigma)
 
 
-def decode_image(model, names, img, conf, enhance=True, augment=True):
+def decode_image(model, names, img, conf, iou, enhance=True, augment=True):
     # Preprocess for better detection
     processed = preprocess(img) if enhance else img
-    res = model.predict(processed, conf=conf, verbose=False, augment=augment)[0]
+    res = model.predict(
+        processed,
+        conf=conf,
+        iou=iou,
+        verbose=False,
+        augment=augment,
+    )[0]
     annotated = img.copy()  # Draw boxes on original (not preprocessed) image
     dets = []
     for b in res.boxes:
@@ -82,7 +88,8 @@ def main():
     ap.add_argument("--source", required=True, help="image file or a folder of images")
     ap.add_argument("--weights", default="model/best.pt", help="path to trained weights (.pt)")
     ap.add_argument("--out", default="sample_outputs", help="output folder")
-    ap.add_argument("--conf", type=float, default=0.35, help="confidence threshold")
+    ap.add_argument("--conf", type=float, default=0.50, help="confidence threshold")
+    ap.add_argument("--iou", type=float, default=0.50, help="model NMS IoU threshold")
     ap.add_argument("--no-enhance", action="store_true", help="skip bilateral filter preprocessing")
     ap.add_argument("--no-tta", action="store_true", help="skip test-time augmentation")
     args = ap.parse_args()
@@ -107,7 +114,7 @@ def main():
         if img is None:
             print("Skip (unreadable):", fp)
             continue
-        text, annotated = decode_image(model, names, img, args.conf,
+        text, annotated = decode_image(model, names, img, args.conf, args.iou,
                                         enhance=not args.no_enhance,
                                         augment=not args.no_tta)
         base = os.path.splitext(os.path.basename(fp))[0]

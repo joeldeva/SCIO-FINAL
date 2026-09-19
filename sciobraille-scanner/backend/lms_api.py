@@ -17,7 +17,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 SyncStatus = Literal["NOT_SYNCED", "SYNCING", "SYNCED", "FAILED"]
@@ -64,7 +64,8 @@ class StreakPayload(ApiModel):
     longest_streak: int = Field(alias="longestStreak", ge=0)
     last_active_date: str = Field(alias="lastActiveDate", min_length=10, max_length=10)
 
-    @validator("last_active_date")
+    @field_validator("last_active_date")
+    @classmethod
     def validate_iso_date(cls, value: str) -> str:
         try:
             datetime.fromisoformat(value)
@@ -87,7 +88,8 @@ class TeacherPayload(ApiModel):
     email: Annotated[str, Field(min_length=3, max_length=320)]
     role: Literal["TEACHER", "ADMIN"]
 
-    @validator("email")
+    @field_validator("email")
+    @classmethod
     def validate_email(cls, value: str) -> str:
         if "@" not in value or value.startswith("@") or value.endswith("@"):
             raise ValueError("email must be a valid email address")
@@ -111,12 +113,34 @@ class StudentPayload(ApiModel):
 
 
 LEVELS = (
-    (1, "Dot Explorer", "Learn the six Braille dot positions.", ["Explore all six dots"]),
-    (2, "Letter Builder", "Build English letters from dots.", [f"Letter {letter}" for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"]),
-    (3, "Letter Recognition", "Identify Braille letters from their dot patterns.", ["Letter recognition practice"]),
-    (4, "Word Reading", "Read simple Braille words cell by cell.", ["Read cat", "Read dog", "Read big", "Read sun", "Read cup", "Read bus", "Read pen", "Read fan", "Read mat", "Read run"]),
-    (5, "Grade 2 Contractions", "Learn common contractions used in Braille books.", ["the", "and", "for", "of", "with", "child", "shall", "this", "which", "out", "still"]),
-    (6, "Scan and Learn", "Practice with real Braille scans.", ["Scan your own Braille page"]),
+    (1, "Dot Explorer", "Learn the six Braille dot positions.", [
+        ("level-1-dot-explorer", "Explore all six dots", False),
+    ]),
+    (2, "Letter Builder", "Build English letters from dots.", [
+        (f"level-2-letter-{letter.lower()}", f"Build letter {letter}", index >= 5)
+        for index, letter in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    ]),
+    (3, "Letter Recognition", "Identify Braille letters from their dot patterns.", [
+        ("level-3-recognition-1", "Recognize A-E", True),
+        ("level-3-recognition-2", "Recognize F-J", True),
+        ("level-3-recognition-3", "Recognize K-O", True),
+        ("level-3-recognition-4", "Recognize P-T", True),
+        ("level-3-recognition-5", "Recognize U-Y", True),
+        ("level-3-recognition-6", "Recognize Z-Z", True),
+    ]),
+    (4, "Word Reading", "Read simple Braille words cell by cell.", [
+        (f"level-4-word-{word}", f"Read {word}", True)
+        for word in ("cat", "dog", "big", "sun", "cup", "bus", "pen", "fan", "mat", "run")
+    ]),
+    (5, "Grade 2 Contractions", "Learn common contractions used in Braille books.", [
+        (f"level-5-contraction-{word}", f"Contraction: {word}", True)
+        for word in ("the", "and", "for", "of", "with", "child", "shall", "this", "which", "out", "still")
+    ]),
+    (6, "Scan and Learn", "Practice with real Braille scans.", [
+        ("level-6-scan-known-letter", "Scan a known letter", True),
+        ("level-6-scan-short-word", "Scan a short word", True),
+        ("level-6-scan-own-page", "Scan your own page", True),
+    ]),
 )
 
 
@@ -130,13 +154,13 @@ def curriculum_payload(level: int | None = None) -> dict[str, Any]:
                 "title": title,
                 "lessons": [
                     LessonPayload(
-                        id=f"level-{number}-{index + 1}",
+                        id=lesson_id,
                         title=lesson_title,
                         description=description,
                         orderIndex=index,
-                        isPremium=False,
-                    ).dict(by_alias=True)
-                    for index, lesson_title in enumerate(lesson_titles)
+                        isPremium=is_premium,
+                    ).model_dump(by_alias=True)
+                    for index, (lesson_id, lesson_title, is_premium) in enumerate(lesson_titles)
                 ],
             }
             for number, title, description, lesson_titles in selected

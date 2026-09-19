@@ -37,6 +37,12 @@ already flipped, call `POST /api/scan-frame?flip_horizontal=false` to prevent a
 second mirror operation. Detection boxes are mapped back to the natural camera
 preview coordinates.
 
+Final V1 backend inference uses confidence `0.50`, model NMS IoU `0.50`,
+class-agnostic duplicate IoU `0.70`, bilateral preprocessing, and TTA. The
+Android fallback keeps confidence `0.35` because the frozen export benchmark
+performed better at that threshold. Both paths use the same class order and
+text reconstruction rules.
+
 ## Android
 
 Configure `SCIOBRAILLE_BACKEND_URL` in `android/gradle.properties`.
@@ -79,7 +85,7 @@ For production sync, configure an HTTPS backend with `SCIOBRAILLE_BACKEND_URL`. 
 
 Free access includes the scanner, Dot Explorer, letters A-E, one recognition practice session, and local progress. Premium or school accounts unlock the full curriculum, scanner learning explanations, cloud sync, reports, and school dashboard support.
 
-No payment, school-code verification, or authentication provider is implemented yet. School codes are retained only for later verified activation. The backend has database and API foundations for schools, teachers, students, classes, analytics, and CSV reports; production deployment must add real authentication and authorization.
+No payment, school-code verification, or authentication provider is implemented yet. School codes are retained only for later verified activation. The backend has database and API foundations for schools, teachers, students, classes, analytics, and CSV reports. **Do not expose the prototype LMS API publicly:** its authentication dependency currently accepts every request. Production deployment must add real authentication and authorization.
 
 ### Accessibility
 
@@ -97,23 +103,25 @@ The release manifest uses `android:usesCleartextTraffic="false"`.
 Known image:
 `C:\Users\devaj\Downloads\test sciobraille.jpeg`
 
-Verified scanner output:
+Verified raw scanner output:
 
 ```text
 jaihind
 india
 sciobraille
-visually impaired
+isually impaired
 great project
 ```
+
+Verified corrected display output restores `visually impaired`. Benchmark accuracy always uses the raw output above.
 
 Backend verification:
 
 - routes include `/api/health` and `/api/scan-frame`
 - `ok=True`
-- `stable=True`
+- `stable=False` on the first frame and `stable=True` after a repeated matching frame
 - detections: `50`
-- confidence: `0.7926`
+- mean confidence: approximately `0.86`
 
 ## Before Play Upload
 

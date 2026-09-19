@@ -1,0 +1,10 @@
+id,image_path,ground_truth,benchmark_type,flip_horizontal,notes
+scio_known_01,C:/Users/devaj/Downloads/test sciobraille.jpeg,"jaihind
+india
+sciobraille
+visually impaired
+great project",physical_phone_known,false,Known user-provided physical Braille sample.
+dmi_root_01,DMI.jpeg,"dmi college
+of engineering",physical_phone_known,,Same content as flipped DMI sample; automatic/default flip allowed.
+dmi_flipped_01,Flipped DMI.jpeg,"dmi college
+of engineering",physical_phone_known,false,Already flipped image; disable backend flip.

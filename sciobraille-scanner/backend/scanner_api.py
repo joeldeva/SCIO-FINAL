@@ -43,21 +43,27 @@ except ImportError:
 
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = Path(os.environ.get("MODEL_PATH", BASE_DIR / "model" / "best.pt"))
-CONFIDENCE = float(os.environ.get("BRAILLE_CONF", "0.35"))
+CONFIDENCE = float(os.environ.get("BRAILLE_CONF", "0.50"))
+IOU = float(os.environ.get("BRAILLE_IOU", "0.50"))
+DUPLICATE_IOU = float(os.environ.get("BRAILLE_DUPLICATE_IOU", "0.70"))
 IMGSZ = int(os.environ.get("BRAILLE_IMGSZ", "640"))
+MAX_UPLOAD_BYTES = int(os.environ.get("BRAILLE_MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
+MAX_IMAGE_PIXELS = int(os.environ.get("BRAILLE_MAX_IMAGE_PIXELS", str(32_000_000)))
 ENHANCE_IMAGE = os.environ.get("BRAILLE_ENHANCE", "true").strip().lower() in {
     "1",
     "true",
     "yes",
     "on",
 }
-AUGMENT_INFERENCE = os.environ.get("BRAILLE_AUGMENT", "false").strip().lower() in {
+AUGMENT_INFERENCE = os.environ.get("BRAILLE_AUGMENT", "true").strip().lower() in {
     "1",
     "true",
     "yes",
     "on",
 }
 HISTORY_SIZE = int(os.environ.get("BRAILLE_HISTORY", "5"))
+SPACE_GAP_MULTIPLIER = float(os.environ.get("BRAILLE_SPACE_GAP_MULTIPLIER", "1.8"))
+SPACE_WIDTH_MULTIPLIER = float(os.environ.get("BRAILLE_SPACE_WIDTH_MULTIPLIER", "1.35"))
 FLIP_HORIZONTAL = os.environ.get("BRAILLE_FLIP_HORIZONTAL", "true").strip().lower() in {
     "1",
     "true",
@@ -65,12 +71,16 @@ FLIP_HORIZONTAL = os.environ.get("BRAILLE_FLIP_HORIZONTAL", "true").strip().lowe
     "on",
 }
 
-app = FastAPI(title="BrailleVision Final Live Scanner")
+if not MODEL_PATH.is_file():
+    raise RuntimeError(f"Braille model not found: {MODEL_PATH}")
+
+app = FastAPI(title="Sciobraille Live Scanner")
 app.include_router(lms_router)
 model = YOLO(str(MODEL_PATH))
 names = model.names
 predict_lock = threading.Lock()
-history: deque[str] = deque(maxlen=HISTORY_SIZE)
+client_histories: dict[str, deque[str]] = {}
+history_lock = threading.Lock()
 spell = SpellChecker() if SpellChecker is not None else None
 
 
@@ -168,7 +178,7 @@ HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BrailleVision Live Scanner</title>
+  <title>Sciobraille Live Scanner</title>
   <style>
     :root {
       color-scheme: dark;
@@ -366,7 +376,7 @@ HTML = r"""<!doctype html>
     </section>
     <section class="side">
       <header>
-        <h1>BrailleVision Live</h1>
+        <h1>Sciobraille Live</h1>
         <p class="sub">Point the camera at physical Braille. Hold steady until the text stabilizes.</p>
       </header>
       <div class="controls">
@@ -505,10 +515,16 @@ HTML = r"""<!doctype html>
 
 
 def _decode_upload(file_bytes: bytes) -> np.ndarray:
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Image frame is empty")
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Image frame exceeds upload limit")
     arr = np.frombuffer(file_bytes, np.uint8)
     frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if frame is None:
         raise HTTPException(status_code=400, detail="Could not decode image frame")
+    if frame.shape[0] * frame.shape[1] > MAX_IMAGE_PIXELS:
+        raise HTTPException(status_code=413, detail="Decoded image dimensions exceed limit")
     return frame
 
 
@@ -609,7 +625,7 @@ def _cluster_lines(dets: list[dict[str, float | str]]) -> list[list[dict[str, fl
         best_index = None
         best_distance = None
         for idx, line in enumerate(lines):
-            line_center = float(np.mean([float(item["y_center"]) for item in line]))
+            line_center = float(np.median([float(item["y_center"]) for item in line]))
             distance = abs(float(det["y_center"]) - line_center)
             if distance <= eps and (best_distance is None or distance < best_distance):
                 best_index = idx
@@ -619,7 +635,33 @@ def _cluster_lines(dets: list[dict[str, float | str]]) -> list[list[dict[str, fl
         else:
             lines[best_index].append(det)
 
-    return sorted(lines, key=lambda line: float(np.mean([float(d["y_center"]) for d in line])))
+    return sorted(lines, key=lambda line: float(np.median([float(d["y_center"]) for d in line])))
+
+
+def _box_iou(left: dict[str, float | str], right: dict[str, float | str]) -> float:
+    x1 = max(float(left["x1"]), float(right["x1"]))
+    y1 = max(float(left["y1"]), float(right["y1"]))
+    x2 = min(float(left["x2"]), float(right["x2"]))
+    y2 = min(float(left["y2"]), float(right["y2"]))
+    intersection = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+    left_area = max(0.0, float(left["x2"]) - float(left["x1"])) * max(
+        0.0, float(left["y2"]) - float(left["y1"])
+    )
+    right_area = max(0.0, float(right["x2"]) - float(right["x1"])) * max(
+        0.0, float(right["y2"]) - float(right["y1"])
+    )
+    union = left_area + right_area - intersection
+    return intersection / union if union > 0 else 0.0
+
+
+def _deduplicate_detections(
+    detections: list[dict[str, float | str]],
+) -> list[dict[str, float | str]]:
+    kept: list[dict[str, float | str]] = []
+    for detection in sorted(detections, key=lambda item: float(item["confidence"]), reverse=True):
+        if all(_box_iou(detection, existing) < DUPLICATE_IOU for existing in kept):
+            kept.append(detection)
+    return kept
 
 
 def _insert_adaptive_spaces(line: list[dict[str, float | str]]) -> list[str]:
@@ -634,11 +676,14 @@ def _insert_adaptive_spaces(line: list[dict[str, float | str]]) -> list[str]:
         for i in range(len(sorted_line) - 1)
     ]
     widths = [float(d["width"]) for d in sorted_line]
-    avg_gap = float(np.mean(gaps))
-    avg_width = float(np.mean(widths))
-    compact_gaps = [gap for gap in gaps if gap <= avg_gap]
-    cell_gap = float(np.mean(compact_gaps)) if compact_gaps else avg_gap
-    space_threshold = max(cell_gap * 1.8, avg_width * 1.35)
+    median_gap = float(np.median(gaps))
+    median_width = float(np.median(widths))
+    compact_gaps = [gap for gap in gaps if gap <= median_gap * 1.25]
+    cell_gap = float(np.median(compact_gaps)) if compact_gaps else median_gap
+    space_threshold = max(
+        cell_gap * SPACE_GAP_MULTIPLIER,
+        median_width * SPACE_WIDTH_MULTIPLIER,
+    )
 
     labels = [str(sorted_line[0]["label"])]
     for idx, det in enumerate(sorted_line[1:], start=1):
@@ -667,10 +712,36 @@ def _text_overlap_ratio(left: str, right: str) -> float:
     return SequenceMatcher(None, normalized_left, normalized_right).ratio()
 
 
+def _history_for_client(client_id: str | None) -> deque[str]:
+    if not client_id:
+        return deque(maxlen=HISTORY_SIZE)
+    normalized = client_id.strip()[:128]
+    if not normalized:
+        return deque(maxlen=HISTORY_SIZE)
+    with history_lock:
+        if normalized not in client_histories and len(client_histories) >= 1024:
+            client_histories.pop(next(iter(client_histories)))
+        return client_histories.setdefault(normalized, deque(maxlen=HISTORY_SIZE))
+
+
+def _stabilize_text(corrected: str, stabilization_history: deque[str]) -> tuple[str, bool]:
+    if corrected:
+        if stabilization_history:
+            previous_text, _ = Counter(stabilization_history).most_common(1)[0]
+            if previous_text and _text_overlap_ratio(corrected, previous_text) < 0.3:
+                stabilization_history.clear()
+        stabilization_history.append(corrected)
+    if not stabilization_history:
+        return corrected, False
+    stable_text, votes = Counter(stabilization_history).most_common(1)[0]
+    return stable_text, votes >= 2
+
+
 def _predict(
     frame: np.ndarray,
     include_image: bool = False,
     flip_horizontal: bool | None = None,
+    stabilization_history: deque[str] | None = None,
 ) -> dict[str, Any]:
     should_flip = FLIP_HORIZONTAL if flip_horizontal is None else flip_horizontal
     model_frame = _prepare_model_frame(frame, should_flip)
@@ -680,9 +751,11 @@ def _predict(
             return model.predict(
                 input_frame,
                 conf=CONFIDENCE,
+                iou=IOU,
                 imgsz=IMGSZ,
                 verbose=False,
                 augment=AUGMENT_INFERENCE,
+                agnostic_nms=False,
             )[0]
 
     processed = preprocess(model_frame) if ENHANCE_IMAGE else model_frame
@@ -691,8 +764,6 @@ def _predict(
         result = run_model(model_frame)
 
     dets = []
-    confidences = []
-    boxes = []
     annotated = frame.copy() if include_image else None
     frame_h, frame_w = frame.shape[:2]
 
@@ -711,9 +782,22 @@ def _predict(
                 "width": x2 - x1,
                 "height": y2 - y1,
                 "confidence": conf,
+                "x1": display_x1,
+                "y1": y1,
+                "x2": display_x2,
+                "y2": y2,
             }
         )
-        confidences.append(conf)
+    dets = _deduplicate_detections(dets)
+    confidences = [float(det["confidence"]) for det in dets]
+    boxes = []
+    for det in dets:
+        display_x1 = float(det["x1"])
+        y1 = float(det["y1"])
+        display_x2 = float(det["x2"])
+        y2 = float(det["y2"])
+        label = str(det["label"])
+        conf = float(det["confidence"])
         boxes.append(
             {
                 "label": label,
@@ -744,18 +828,10 @@ def _predict(
 
     raw_text = _reading_order_adaptive(dets)
     corrected = _correct_text(raw_text)
-    if corrected:
-        if history:
-            previous_text, _ = Counter(history).most_common(1)[0]
-            if previous_text and _text_overlap_ratio(corrected, previous_text) < 0.3:
-                history.clear()
-        history.append(corrected)
-
-    stable_text = corrected
-    stable = False
-    if history:
-        stable_text, votes = Counter(history).most_common(1)[0]
-        stable = votes >= 2
+    stable_text, stable = _stabilize_text(
+        corrected,
+        stabilization_history if stabilization_history is not None else deque(maxlen=HISTORY_SIZE),
+    )
 
     payload: dict[str, Any] = {
         "ok": True,
@@ -764,6 +840,7 @@ def _predict(
         "detections": len(dets),
         "confidence": round(float(np.mean(confidences)), 4) if confidences else 0.0,
         "raw_text": raw_text,
+        "corrected_text": corrected,
         "boxes": boxes,
         "detector_classes": len(names),
         "supported_future_classes": FUTURE_CLASS_SCHEMA,
@@ -794,10 +871,16 @@ async def health() -> dict[str, Any]:
         "class_names": names,
         "future_class_schema": FUTURE_CLASS_SCHEMA,
         "confidence": CONFIDENCE,
+        "iou": IOU,
+        "duplicate_iou": DUPLICATE_IOU,
         "imgsz": IMGSZ,
+        "max_upload_bytes": MAX_UPLOAD_BYTES,
+        "max_image_pixels": MAX_IMAGE_PIXELS,
         "flip_horizontal": FLIP_HORIZONTAL,
         "enhance_image": ENHANCE_IMAGE,
         "augment_inference": AUGMENT_INFERENCE,
+        "space_gap_multiplier": SPACE_GAP_MULTIPLIER,
+        "space_width_multiplier": SPACE_WIDTH_MULTIPLIER,
     }
 
 
@@ -806,32 +889,49 @@ async def scan_frame(
     frame: UploadFile = File(...),
     include_image: bool = Query(default=False),
     flip_horizontal: bool | None = Query(default=None),
+    client_id: str | None = Query(default=None),
 ) -> JSONResponse:
     if frame.content_type and not frame.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image frames are accepted")
     image = _decode_upload(await frame.read())
     return JSONResponse(
-        _predict(
+        await asyncio.to_thread(
+            _predict,
             image,
-            include_image=include_image,
-            flip_horizontal=flip_horizontal,
+            include_image,
+            flip_horizontal,
+            _history_for_client(client_id),
         )
     )
 
 
 @app.websocket("/ws/scan")
-async def scan_websocket(websocket: WebSocket) -> None:
+async def scan_websocket(
+    websocket: WebSocket,
+    flip_horizontal: bool | None = Query(default=None),
+) -> None:
     await websocket.accept()
+    connection_history: deque[str] = deque(maxlen=HISTORY_SIZE)
     try:
         while True:
             frame_bytes = await websocket.receive_bytes()
             image = _decode_upload(frame_bytes)
-            payload = await asyncio.to_thread(_predict, image, False)
+            payload = await asyncio.to_thread(
+                _predict,
+                image,
+                False,
+                flip_horizontal,
+                connection_history,
+            )
             await websocket.send_json(payload)
     except WebSocketDisconnect:
         return
+    except HTTPException as exc:
+        await websocket.send_json({"ok": False, "error": str(exc.detail)})
+        await websocket.close(code=1003)
     except Exception as exc:
-        await websocket.send_json({"ok": False, "error": str(exc)})
+        del exc
+        await websocket.send_json({"ok": False, "error": "Scanner processing failed"})
         await websocket.close(code=1011)
 
 

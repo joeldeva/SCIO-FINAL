@@ -1,14 +1,21 @@
-# Regenerable build/cache outputs
-build/
-.gradle/
 .idea/
-.kotlin/
-__pycache__/
-.pytest_cache/
-*.pyc
-*.pyo
-.DS_Store
-
-# Local machine files
-local.properties
-*.log
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.venv/
+**/venv/
+**/node_modules/
+**/.gradle/
+**/.kotlin/
+**/build/
+**/local.properties
+**/*.jks
+**/*.keystore
+**/.env
+**/.env.*
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/*.log
+**/.DS_Store
+**/Thumbs.db

@@ -1,0 +1,142 @@
+{
+  "version": 2,
+  "canonical_classes": {
+    "0": "a",
+    "1": "b",
+    "2": "c",
+    "3": "d",
+    "4": "e",
+    "5": "f",
+    "6": "g",
+    "7": "h",
+    "8": "i",
+    "9": "j",
+    "10": "k",
+    "11": "l",
+    "12": "m",
+    "13": "n",
+    "14": "o",
+    "15": "p",
+    "16": "q",
+    "17": "r",
+    "18": "s",
+    "19": "t",
+    "20": "u",
+    "21": "v",
+    "22": "w",
+    "23": "x",
+    "24": "y",
+    "25": "z"
+  },
+  "candidate_images": 5001,
+  "valid_candidates_before_deduplication": 5001,
+  "invalid_candidates": 0,
+  "invalid_images": 0,
+  "candidate_bounding_boxes": 148337,
+  "polygon_rows_converted_before_deduplication": 842,
+  "source_candidates": {
+    "asmitha": {
+      "images": 1325,
+      "usable_images": 1325,
+      "bounding_boxes": 21439,
+      "split_counts": {"train": 1016, "val": 209, "test": 100}
+    },
+    "prabh_braille_merged": {
+      "images": 1614,
+      "usable_images": 1614,
+      "bounding_boxes": 90469,
+      "split_counts": {"train": 1372, "val": 242}
+    },
+    "sangam_braillie": {
+      "images": 2062,
+      "usable_images": 2062,
+      "bounding_boxes": 36429,
+      "split_counts": {"train": 1757, "val": 206, "test": 99}
+    }
+  },
+  "usable_unique_images": 1784,
+  "total_bounding_boxes": 99352,
+  "exact_duplicate_images_removed": 832,
+  "near_or_capture_duplicate_images_removed": 2385,
+  "duplicate_groups": 1784,
+  "external_benchmark_groups_excluded": 0,
+  "split_counts": {
+    "test": 179,
+    "train": 1440,
+    "val": 165
+  },
+  "split_percentages": {
+    "test": 0.10033632286995516,
+    "train": 0.8071748878923767,
+    "val": 0.09248878923766816
+  },
+  "source_contribution": {
+    "prabh_braille_merged": 1414,
+    "sangam_braillie": 143,
+    "asmitha": 227
+  },
+  "class_distribution": {
+    "a": 9288,
+    "b": 2102,
+    "c": 1311,
+    "d": 4232,
+    "e": 9354,
+    "f": 842,
+    "g": 2122,
+    "h": 2129,
+    "i": 6563,
+    "j": 1229,
+    "k": 4023,
+    "l": 5414,
+    "m": 3253,
+    "n": 5759,
+    "o": 9658,
+    "p": 2910,
+    "q": 1966,
+    "r": 4881,
+    "s": 6159,
+    "t": 6160,
+    "u": 2928,
+    "v": 763,
+    "w": 3519,
+    "x": 546,
+    "y": 726,
+    "z": 1515
+  },
+  "polygon_rows_converted_in_retained_images": 457,
+  "deduplication_links": {
+    "exact_links": 832,
+    "capture_links": 658,
+    "near_links": 1727
+  },
+  "source_discovery": [
+    {
+      "data_yaml": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\prabh-decoders-braillevision\\dataset\\braille_merged\\data.yaml",
+      "status": "included",
+      "detail": "1614 candidate images"
+    },
+    {
+      "data_yaml": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sangam-Braillie\\dataset\\data.yaml",
+      "status": "included",
+      "detail": "2062 candidate images"
+    },
+    {
+      "data_yaml": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\asmitha\\dataset\\data.yaml",
+      "status": "included",
+      "detail": "1325 candidate images"
+    },
+    {
+      "data_yaml": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\braille_hackathon_siddhant\\dataset\\data.yaml",
+      "status": "not_usable",
+      "detail": "images=14, labels=0, unsupported_mapping=0"
+    }
+  ],
+  "deduplication_policy": {
+    "exact": "SHA256 equality",
+    "capture": "same normalized original filename within source",
+    "near": "same class histogram; aspect ratio within 2%; pHash<=3; dHash<=3; pixel correlation>=0.985; edge overlap>=0.72",
+    "retention": "one highest-quality representative per connected duplicate/capture group"
+  },
+  "split_policy": "deterministic group hash; 80% train, 10% val, 10% internal test",
+  "external_benchmark_policy": "exact benchmark overlaps and their full duplicate group are excluded"
+}

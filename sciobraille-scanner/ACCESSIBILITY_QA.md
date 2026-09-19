@@ -1,6 +1,6 @@
 # BrailleEye LMS Accessibility QA
 
-Date: 2026-06-24
+Date: 2026-09-19
 
 Scope: code-level audit of the Android LMS screens. Scanner camera behavior is outside this LMS pass.
 
@@ -116,3 +116,9 @@ Fixes made:
 - Test at Android Font size `Largest` and Display size `Largest`; programmatic layouts use 48 dp minimum controls, but the compact lesson headers should be reviewed on small screens.
 - Test haptic behavior on at least one device without a vibrator and one device with system haptics disabled.
 - Before Play Store release, add automated accessibility checks through Espresso AccessibilityChecks and complete a screen-reader usability session with Braille learners.
+
+## Final QA Addendum
+
+- Android lint completed with zero accessibility-category findings and zero errors.
+- Scanner history actions now expose labeled Read, Copy, and Share controls.
+- Camera, TalkBack reading order, largest font settings, and haptic behavior still require manual testing on physical Android devices. These items were not claimed as device-verified during this local pass.

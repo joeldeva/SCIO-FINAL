@@ -1,0 +1,568 @@
+{
+  "version": 1,
+  "status": "finalized",
+  "initialization": {
+    "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-scanner\\backend\\model\\best.pt",
+    "sha256": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974"
+  },
+  "dataset": {
+    "data_yaml": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\prabh-decoders-braillevision\\dataset\\braille_merged\\data.yaml",
+    "data_yaml_sha256": "39f0bbbc231d5f250d5c93b51f8e2ff87db1c84640a3ee02b1360a081026a545",
+    "fingerprint": "5d93de13cd16438a660b3eb015e7012f0d241aab1cee3360a579c95cbdc81454",
+    "counts": {
+      "images": 1614,
+      "labels": 1614
+    },
+    "lineage": "prabh-decoders-braillevision/dataset/braille_merged only"
+  },
+  "environment": {
+    "timestamp_utc": "2026-09-17T16:05:03.745582+00:00",
+    "python": "3.10.0 (tags/v3.10.0:b494f59, Oct  4 2021, 19:00:18) [MSC v.1929 64 bit (AMD64)]",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "pytorch": "2.8.0+cu128",
+    "ultralytics": "8.4.14",
+    "opencv": "5.0.0",
+    "cuda_available": true,
+    "cuda_version": "12.8",
+    "cuda_device": "NVIDIA GeForce RTX 3050 6GB Laptop GPU"
+  },
+  "training": {
+    "epochs": 30,
+    "patience": 7,
+    "batch": 8,
+    "imgsz": 640,
+    "device": "0",
+    "workers": 4,
+    "optimizer": "AdamW",
+    "lr0": 0.0005,
+    "lrf": 0.1,
+    "momentum": 0.937,
+    "weight_decay": 0.0005,
+    "warmup_epochs": 2.0,
+    "warmup_momentum": 0.8,
+    "warmup_bias_lr": 0.01,
+    "freeze": 10,
+    "seed": 20260917,
+    "deterministic": true,
+    "amp": true,
+    "cache": false,
+    "save_period": 5,
+    "close_mosaic": 5
+  },
+  "geometric_augmentations": {
+    "degrees": 3.0,
+    "translate": 0.03,
+    "scale": 0.12,
+    "shear": 0.0,
+    "perspective": 0.0002,
+    "flipud": 0.0,
+    "fliplr": 0.0,
+    "mosaic": 0.1,
+    "mixup": 0.0,
+    "cutmix": 0.0,
+    "copy_paste": 0.0
+  },
+  "photometric_augmentations": {
+    "probability": 0.35,
+    "brightness_limit": 0.1,
+    "contrast_limit": 0.12,
+    "gamma_min": 0.92,
+    "gamma_max": 1.08,
+    "blur_probability": 0.08,
+    "noise_probability": 0.1,
+    "noise_sigma": 0.012,
+    "shadow_probability": 0.1,
+    "shadow_strength_min": 0.08,
+    "shadow_strength_max": 0.22,
+    "hsv_h": 0.0,
+    "hsv_s": 0.05,
+    "hsv_v": 0.12
+  },
+  "run_dir": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\runs\\train_20260917_211013",
+  "selection_priority": [
+    "raw_cer",
+    "raw_wer",
+    "recall",
+    "map50_95",
+    "latency"
+  ],
+  "selected": {
+    "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-scanner\\backend\\model\\best.pt",
+    "sha256": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974",
+    "size_bytes": 22537258,
+    "raw_cer": 0.35200179937022047,
+    "raw_wer": 0.46428571428571425,
+    "character_accuracy": 0.6479982006297796,
+    "word_accuracy": 0.5357142857142857,
+    "exact_sentence_accuracy": 0.0,
+    "average_latency_ms": 230.12472222196973,
+    "median_latency_ms": 190.65890001365915,
+    "predictions": [
+      {
+        "id": "scio_known_01",
+        "raw_text": "jaihind\nindia\nsciobraille\nisually impaired\ngreat project",
+        "detections": 53,
+        "mean_confidence": 0.853907289370051,
+        "flipped": false,
+        "cer": 0.017543859649122806,
+        "wer": 0.14285714285714285
+      },
+      {
+        "id": "dmi_root_01",
+        "raw_text": "",
+        "detections": 0,
+        "mean_confidence": 0.0,
+        "flipped": false,
+        "cer": 1.0,
+        "wer": 1.0
+      },
+      {
+        "id": "dmi_flipped_01",
+        "raw_text": "dmi college\nof engineerin",
+        "detections": 23,
+        "mean_confidence": 0.844865866329359,
+        "flipped": false,
+        "cer": 0.038461538461538464,
+        "wer": 0.25
+      }
+    ],
+    "precision": 0.9571812844286474,
+    "recall": 0.9086278246795114,
+    "map50": 0.9451669352836093,
+    "map50_95": 0.7506425713897258,
+    "validation_seconds": 36.520311400003266
+  },
+  "final_model": {
+    "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\best.pt",
+    "sha256": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974"
+  },
+  "candidates": [
+    {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-scanner\\backend\\model\\best.pt",
+      "sha256": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974",
+      "size_bytes": 22537258,
+      "raw_cer": 0.35200179937022047,
+      "raw_wer": 0.46428571428571425,
+      "character_accuracy": 0.6479982006297796,
+      "word_accuracy": 0.5357142857142857,
+      "exact_sentence_accuracy": 0.0,
+      "average_latency_ms": 230.12472222196973,
+      "median_latency_ms": 190.65890001365915,
+      "predictions": [
+        {
+          "id": "scio_known_01",
+          "raw_text": "jaihind\nindia\nsciobraille\nisually impaired\ngreat project",
+          "detections": 53,
+          "mean_confidence": 0.853907289370051,
+          "flipped": false,
+          "cer": 0.017543859649122806,
+          "wer": 0.14285714285714285
+        },
+        {
+          "id": "dmi_root_01",
+          "raw_text": "",
+          "detections": 0,
+          "mean_confidence": 0.0,
+          "flipped": false,
+          "cer": 1.0,
+          "wer": 1.0
+        },
+        {
+          "id": "dmi_flipped_01",
+          "raw_text": "dmi college\nof engineerin",
+          "detections": 23,
+          "mean_confidence": 0.844865866329359,
+          "flipped": false,
+          "cer": 0.038461538461538464,
+          "wer": 0.25
+        }
+      ],
+      "precision": 0.9571812844286474,
+      "recall": 0.9086278246795114,
+      "map50": 0.9451669352836093,
+      "map50_95": 0.7506425713897258,
+      "validation_seconds": 36.520311400003266
+    },
+    {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\runs\\train_20260917_211013\\weights\\best.pt",
+      "sha256": "06e5b88663a6d1f0bc5549cd8a2ebe2ab353a0ef454a1309b9c888b343662d5a",
+      "size_bytes": 22516394,
+      "raw_cer": 0.3706702654071075,
+      "raw_wer": 0.5119047619047619,
+      "character_accuracy": 0.6293297345928925,
+      "word_accuracy": 0.48809523809523814,
+      "exact_sentence_accuracy": 0.0,
+      "average_latency_ms": 171.66537777585393,
+      "median_latency_ms": 171.35730001609772,
+      "predictions": [
+        {
+          "id": "scio_known_01",
+          "raw_text": "jaihind\nindia\nsciobraille\nisually impaired\ngreaq project",
+          "detections": 55,
+          "mean_confidence": 0.8353241161866621,
+          "flipped": false,
+          "cer": 0.03508771929824561,
+          "wer": 0.2857142857142857
+        },
+        {
+          "id": "dmi_root_01",
+          "raw_text": "",
+          "detections": 0,
+          "mean_confidence": 0.0,
+          "flipped": false,
+          "cer": 1.0,
+          "wer": 1.0
+        },
+        {
+          "id": "dmi_flipped_01",
+          "raw_text": "dmi college\nof engineewin",
+          "detections": 31,
+          "mean_confidence": 0.8449729142650482,
+          "flipped": false,
+          "cer": 0.07692307692307693,
+          "wer": 0.25
+        }
+      ],
+      "precision": 0.9688025916943881,
+      "recall": 0.9181185042288883,
+      "map50": 0.9495285775284624,
+      "map50_95": 0.7638139283410521,
+      "validation_seconds": 30.32374069999787
+    },
+    {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\runs\\train_20260917_211013\\weights\\last.pt",
+      "sha256": "3f04390c69f6ef21ac5117c726ba7da6ae533561705f57f0767f89b1f8675d10",
+      "size_bytes": 22516394,
+      "raw_cer": 0.3706702654071075,
+      "raw_wer": 0.5119047619047619,
+      "character_accuracy": 0.6293297345928925,
+      "word_accuracy": 0.48809523809523814,
+      "exact_sentence_accuracy": 0.0,
+      "average_latency_ms": 163.25614443889611,
+      "median_latency_ms": 175.63879999215715,
+      "predictions": [
+        {
+          "id": "scio_known_01",
+          "raw_text": "jaihind\nindia\nsciobraille\nisually impaired\ngreaq project",
+          "detections": 55,
+          "mean_confidence": 0.8416724855249579,
+          "flipped": false,
+          "cer": 0.03508771929824561,
+          "wer": 0.2857142857142857
+        },
+        {
+          "id": "dmi_root_01",
+          "raw_text": "",
+          "detections": 0,
+          "mean_confidence": 0.0,
+          "flipped": false,
+          "cer": 1.0,
+          "wer": 1.0
+        },
+        {
+          "id": "dmi_flipped_01",
+          "raw_text": "dmi college\nof engineewin",
+          "detections": 32,
+          "mean_confidence": 0.8401187378913164,
+          "flipped": false,
+          "cer": 0.07692307692307693,
+          "wer": 0.25
+        }
+      ],
+      "precision": 0.9697673784476643,
+      "recall": 0.919923307392123,
+      "map50": 0.9492868190498609,
+      "map50_95": 0.7597824702387667,
+      "validation_seconds": 29.58518989998265
+    },
+    {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\runs\\train_20260917_211013\\weights\\epoch0.pt",
+      "sha256": "db964eeeb83234e77bb799300f0dec3f642b71f75b6dccf9370dcc11518157f3",
+      "size_bytes": 46889801,
+      "raw_cer": 0.36482231219073324,
+      "raw_wer": 0.46428571428571425,
+      "character_accuracy": 0.6351776878092668,
+      "word_accuracy": 0.5357142857142857,
+      "exact_sentence_accuracy": 0.0,
+      "average_latency_ms": 166.2997888828007,
+      "median_latency_ms": 177.10070000612177,
+      "predictions": [
+        {
+          "id": "scio_known_01",
+          "raw_text": "jaihind\nindia\nsciobraille\nisually impaired\ngreat project",
+          "detections": 52,
+          "mean_confidence": 0.857347024174837,
+          "flipped": false,
+          "cer": 0.017543859649122806,
+          "wer": 0.14285714285714285
+        },
+        {
+          "id": "dmi_root_01",
+          "raw_text": "",
+          "detections": 0,
+          "mean_confidence": 0.0,
+          "flipped": false,
+          "cer": 1.0,
+          "wer": 1.0
+        },
+        {
+          "id": "dmi_flipped_01",
+          "raw_text": "dmi college\nof engineewin",
+          "detections": 30,
+          "mean_confidence": 0.8202795644601186,
+          "flipped": false,
+          "cer": 0.07692307692307693,
+          "wer": 0.25
+        }
+      ],
+      "precision": 0.9663302775613111,
+      "recall": 0.9192758382250672,
+      "map50": 0.9468562116331428,
+      "map50_95": 0.7540560367453233,
+      "validation_seconds": 28.7739045000053
+    },
+    {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\runs\\train_20260917_211013\\weights\\epoch10.pt",
+      "sha256": "0ef94f1b08062ea7ce10e9474f2974634305dce2323a1e15f6686756cb9e7845",
+      "size_bytes": 46890825,
+      "raw_cer": 0.3765182186234817,
+      "raw_wer": 0.5595238095238095,
+      "character_accuracy": 0.6234817813765182,
+      "word_accuracy": 0.44047619047619047,
+      "exact_sentence_accuracy": 0.0,
+      "average_latency_ms": 164.6537444450789,
+      "median_latency_ms": 165.0573999795597,
+      "predictions": [
+        {
+          "id": "scio_known_01",
+          "raw_text": "jaihfnd\nindia\nsciobraille\nisually impaired\ngreaq project",
+          "detections": 54,
+          "mean_confidence": 0.8452849366046764,
+          "flipped": false,
+          "cer": 0.05263157894736842,
+          "wer": 0.42857142857142855
+        },
+        {
+          "id": "dmi_root_01",
+          "raw_text": "",
+          "detections": 0,
+          "mean_confidence": 0.0,
+          "flipped": false,
+          "cer": 1.0,
+          "wer": 1.0
+        },
+        {
+          "id": "dmi_flipped_01",
+          "raw_text": "dmi college\nof engineewin",
+          "detections": 31,
+          "mean_confidence": 0.8458256413859706,
+          "flipped": false,
+          "cer": 0.07692307692307693,
+          "wer": 0.25
+        }
+      ],
+      "precision": 0.9688549334749315,
+      "recall": 0.9126115261881935,
+      "map50": 0.9444790980597116,
+      "map50_95": 0.7565935771315775,
+      "validation_seconds": 29.85446070000762
+    },
+    {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\runs\\train_20260917_211013\\weights\\epoch15.pt",
+      "sha256": "06fae94f0cbf422088fb9dd8f66de1f044b72c77b8571befb3e9972e62a8b89d",
+      "size_bytes": 46891465,
+      "raw_cer": 0.3834907782276204,
+      "raw_wer": 0.5952380952380952,
+      "character_accuracy": 0.6165092217723797,
+      "word_accuracy": 0.4047619047619048,
+      "exact_sentence_accuracy": 0.0,
+      "average_latency_ms": 159.63652221641192,
+      "median_latency_ms": 170.26630000327714,
+      "predictions": [
+        {
+          "id": "scio_known_01",
+          "raw_text": "jaihind\nindia\nsciobraille\nisually impaired\ngreaq project",
+          "detections": 55,
+          "mean_confidence": 0.8342862053350969,
+          "flipped": false,
+          "cer": 0.03508771929824561,
+          "wer": 0.2857142857142857
+        },
+        {
+          "id": "dmi_root_01",
+          "raw_text": "",
+          "detections": 0,
+          "mean_confidence": 0.0,
+          "flipped": false,
+          "cer": 1.0,
+          "wer": 1.0
+        },
+        {
+          "id": "dmi_flipped_01",
+          "raw_text": "dmi college\nod engineewin",
+          "detections": 31,
+          "mean_confidence": 0.8379823815438056,
+          "flipped": false,
+          "cer": 0.11538461538461539,
+          "wer": 0.5
+        }
+      ],
+      "precision": 0.9709339383754553,
+      "recall": 0.9199877503618843,
+      "map50": 0.9514512054563362,
+      "map50_95": 0.7579556755461728,
+      "validation_seconds": 29.494462899980135
+    },
+    {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\runs\\train_20260917_211013\\weights\\epoch20.pt",
+      "sha256": "0c7f128837050ac065c03914a0dfd5049b475627c862f80190aa4143a6d3ac56",
+      "size_bytes": 46892105,
+      "raw_cer": 0.3834907782276204,
+      "raw_wer": 0.5952380952380952,
+      "character_accuracy": 0.6165092217723797,
+      "word_accuracy": 0.4047619047619048,
+      "exact_sentence_accuracy": 0.0,
+      "average_latency_ms": 161.64107777553403,
+      "median_latency_ms": 170.98949998035096,
+      "predictions": [
+        {
+          "id": "scio_known_01",
+          "raw_text": "jaihind\nindia\nsciobraille\nisually impaired\ngreaq project",
+          "detections": 55,
+          "mean_confidence": 0.8311526710336858,
+          "flipped": false,
+          "cer": 0.03508771929824561,
+          "wer": 0.2857142857142857
+        },
+        {
+          "id": "dmi_root_01",
+          "raw_text": "",
+          "detections": 0,
+          "mean_confidence": 0.0,
+          "flipped": false,
+          "cer": 1.0,
+          "wer": 1.0
+        },
+        {
+          "id": "dmi_flipped_01",
+          "raw_text": "dmi college\nod engineewin",
+          "detections": 31,
+          "mean_confidence": 0.8404287119065562,
+          "flipped": false,
+          "cer": 0.11538461538461539,
+          "wer": 0.5
+        }
+      ],
+      "precision": 0.9694515399889055,
+      "recall": 0.9168529648525285,
+      "map50": 0.947543562835537,
+      "map50_95": 0.7573257863881305,
+      "validation_seconds": 28.874615400010953
+    },
+    {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\runs\\train_20260917_211013\\weights\\epoch25.pt",
+      "sha256": "150a3b2ec1cae04fb7d110cba175d03f9732f36180a1c29112684fcf2c1ee847",
+      "size_bytes": 46892745,
+      "raw_cer": 0.3706702654071075,
+      "raw_wer": 0.5119047619047619,
+      "character_accuracy": 0.6293297345928925,
+      "word_accuracy": 0.48809523809523814,
+      "exact_sentence_accuracy": 0.0,
+      "average_latency_ms": 164.35862222958045,
+      "median_latency_ms": 170.15340001671575,
+      "predictions": [
+        {
+          "id": "scio_known_01",
+          "raw_text": "jaihind\nindia\nsciobraille\nisually impaired\ngreaq project",
+          "detections": 55,
+          "mean_confidence": 0.8416724855249579,
+          "flipped": false,
+          "cer": 0.03508771929824561,
+          "wer": 0.2857142857142857
+        },
+        {
+          "id": "dmi_root_01",
+          "raw_text": "",
+          "detections": 0,
+          "mean_confidence": 0.0,
+          "flipped": false,
+          "cer": 1.0,
+          "wer": 1.0
+        },
+        {
+          "id": "dmi_flipped_01",
+          "raw_text": "dmi college\nof engineewin",
+          "detections": 32,
+          "mean_confidence": 0.8401187378913164,
+          "flipped": false,
+          "cer": 0.07692307692307693,
+          "wer": 0.25
+        }
+      ],
+      "precision": 0.9697673784476643,
+      "recall": 0.919923307392123,
+      "map50": 0.9492868190498609,
+      "map50_95": 0.7597824702387667,
+      "validation_seconds": 28.701763999997638
+    },
+    {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\runs\\train_20260917_211013\\weights\\epoch5.pt",
+      "sha256": "5f7f698a802b03d54057f9e49517a5c3d9d7edd59a4901c713c5ac399c6aa297",
+      "size_bytes": 46890185,
+      "raw_cer": 0.3706702654071075,
+      "raw_wer": 0.5119047619047619,
+      "character_accuracy": 0.6293297345928925,
+      "word_accuracy": 0.48809523809523814,
+      "exact_sentence_accuracy": 0.0,
+      "average_latency_ms": 176.23513333900416,
+      "median_latency_ms": 169.6249000087846,
+      "predictions": [
+        {
+          "id": "scio_known_01",
+          "raw_text": "jaihind\nindia\nsciobraille\nisually impaired\ngreaq project",
+          "detections": 52,
+          "mean_confidence": 0.8541610195086553,
+          "flipped": false,
+          "cer": 0.03508771929824561,
+          "wer": 0.2857142857142857
+        },
+        {
+          "id": "dmi_root_01",
+          "raw_text": "",
+          "detections": 0,
+          "mean_confidence": 0.0,
+          "flipped": false,
+          "cer": 1.0,
+          "wer": 1.0
+        },
+        {
+          "id": "dmi_flipped_01",
+          "raw_text": "dmi college\nof engineewin",
+          "detections": 30,
+          "mean_confidence": 0.8489755868911744,
+          "flipped": false,
+          "cer": 0.07692307692307693,
+          "wer": 0.25
+        }
+      ],
+      "precision": 0.9685906507948077,
+      "recall": 0.9208543918848804,
+      "map50": 0.9496909955060814,
+      "map50_95": 0.7595768255933593,
+      "validation_seconds": 28.740089300001273
+    }
+  ],
+  "production_sha256_after": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974",
+  "training_results": {
+    "epochs_completed": 26,
+    "maximum_epochs": 30,
+    "stopped_early": true,
+    "elapsed_seconds": 1133.72,
+    "best_map50_95_epoch": 19,
+    "best_map50_95": 0.75682,
+    "final_recall": 0.91984,
+    "final_map50": 0.94927,
+    "final_map50_95": 0.75347,
+    "results_csv": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v1_optimized\\runs\\train_20260917_211013\\results.csv"
+  }
+}

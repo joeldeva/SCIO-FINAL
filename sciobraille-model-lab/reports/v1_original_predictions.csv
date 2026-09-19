@@ -1,0 +1,20 @@
+id,image_path,benchmark_type,flip_horizontal,ground_truth,raw_text,corrected_text,detections,confidence,latency_ms_avg_sample,latency_ms_median_sample,cer,wer,character_accuracy,word_accuracy,exact_sentence_accuracy,error
+scio_known_01,C:/Users/devaj/Downloads/test sciobraille.jpeg,physical_phone_known,false,"jaihind
+india
+sciobraille
+visually impaired
+great project","jaihfind
+india
+sciobraille
+isually impaire a
+greaq project","jaihind
+india
+sciobraille
+visually impaired a
+great project",51,0.8029,262.5440999981947,224.98890000861138,0.08771929824561403,0.7142857142857143,0.9122807017543859,0.2857142857142857,False,
+dmi_root_01,DMI.jpeg,physical_phone_known,,"dmi college
+of engineering",,,0,0.0,354.7118666562407,364.46099999011494,1.0,1.0,0.0,0.0,False,
+dmi_flipped_01,Flipped DMI.jpeg,physical_phone_known,false,"dmi college
+of engineering","dmi college
+of iengineerwin","dmi college
+of engineering",24,0.7889,295.7734999945387,285.3447000088636,0.11538461538461539,0.25,0.8846153846153846,0.75,False,

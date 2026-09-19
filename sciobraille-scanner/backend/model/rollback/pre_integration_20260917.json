@@ -1,0 +1,25 @@
+{
+  "recorded_at": "2026-09-17T23:11:11.6889417+05:30",
+  "selected_model": "Sciobraille V1 Optimized",
+  "production_model": {
+    "path": "../best.pt",
+    "sha256": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974",
+    "size_bytes": 22537258
+  },
+  "new_model": {
+    "path": "../../../../sciobraille-model-lab/models/v1_optimized/best.pt",
+    "sha256": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974",
+    "size_bytes": 22537258
+  },
+  "rollback_model": {
+    "path": "../best_previous_B.pt",
+    "sha256": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974",
+    "size_bytes": 22537258
+  },
+  "existing_exports": {
+    "onnx_sha256": "b66ced14c4031885670ce5871a5889cdc35ff6925eccfdfad1b6bd7bd3ef3ffc",
+    "float32_tflite_sha256": "88440e300ef393652075bd18ca471dda43851247ba6f10deb4d9bc39bf4f0e18",
+    "int8_tflite_sha256": "9f6c45865ed2421041e8e46c865604ef953987382336c92bca91092d8eb5f4ad"
+  },
+  "note": "Production and selected V1 checkpoints are byte-identical. Existing production checkpoint was not overwritten."
+}

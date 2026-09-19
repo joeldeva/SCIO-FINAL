@@ -1,0 +1,20 @@
+id,image_path,ground_truth,benchmark_type,flip_horizontal,notes,raw_text,corrected_text,detections,confidence,latency_ms_average,latency_ms_median,error,char_distance,word_distance,truth_chars,truth_words,cer,wer,character_accuracy,word_accuracy,exact_sentence_accuracy
+scio_known_01,C:/Users/devaj/Downloads/test sciobraille.jpeg,"jaihind
+india
+sciobraille
+visually impaired
+great project",physical_phone_known,false,Known user-provided physical Braille sample.,"jaihind
+india
+sciobraille
+isually impaired
+great project","jaihind
+india
+sciobraille
+visually impaired
+great project",50,0.7939,3999.307999998564,3979.9414000008255,,1,1,57,7,0.017543859649122806,0.14285714285714285,0.9824561403508771,0.8571428571428572,False
+dmi_root_01,DMI.jpeg,"dmi college
+of engineering",physical_phone_known,,Same content as flipped DMI sample; automatic/default flip allowed.,,,0,0.0,7529.405966672736,7572.784000018146,,26,4,26,4,1.0,1.0,0.0,0.0,False
+dmi_flipped_01,Flipped DMI.jpeg,"dmi college
+of engineering",physical_phone_known,false,Already flipped image; disable backend flip.,"dmi college
+of engineerin","dmi college
+of engineering",22,0.7487,4004.9725666661593,4060.1686000009067,,1,1,26,4,0.038461538461538464,0.25,0.9615384615384616,0.75,False

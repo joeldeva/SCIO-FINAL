@@ -1,0 +1,29 @@
+runtime,image,ground_truth,raw_text,detections,confidence,CER,WER,character_accuracy,word_accuracy,exact_match,average_latency_ms,median_latency_ms,error
+backend_pt,C:/Users/devaj/Downloads/test sciobraille.jpeg,"jaihind
+india
+sciobraille
+visually impaired
+great project","jaihind
+india
+sciobraille
+isually impaired
+great project",50,0.8625,0.017543859649122806,0.14285714285714285,0.9824561403508771,0.8571428571428572,False,350.1505399995949,148.69579998776317,
+backend_pt,DMI.jpeg,"dmi college
+of engineering",,0,0.0,1.0,1.0,0.0,0.0,False,222.7947600011248,203.7043000163976,
+backend_pt,Flipped DMI.jpeg,"dmi college
+of engineering","dmi college
+of engineerin",22,0.8536,0.038461538461538464,0.25,0.9615384615384616,0.75,False,239.88658000598662,194.67990001430735,
+android_int8,C:/Users/devaj/Downloads/test sciobraille.jpeg,"jaihind
+india
+sciobraille
+visually impaired
+great project","jaihind
+india
+sciobraille
+isually impaired
+great project",50,0.7947,0.017543859649122806,0.14285714285714285,0.9824561403508771,0.8571428571428572,False,456.4009999933963,435.72489998769015,
+android_int8,DMI.jpeg,"dmi college
+of engineering",,0,0.0,1.0,1.0,0.0,0.0,False,801.340599990605,800.8119000005536,
+android_int8,Flipped DMI.jpeg,"dmi college
+of engineering","dmi college
+of engineerin",22,0.752,0.038461538461538464,0.25,0.9615384615384616,0.75,False,486.46253332844935,489.63940000976436,

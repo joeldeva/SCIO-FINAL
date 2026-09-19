@@ -1,0 +1,85 @@
+version: 1
+name: sciobraille_v1_optimized
+description: Conservative fine-tuning of the production checkpoint on its original dataset lineage.
+
+paths:
+  initialization: sciobraille-scanner/backend/model/best.pt
+  data: prabh-decoders-braillevision/dataset/braille_merged/data.yaml
+  benchmark: sciobraille-model-lab/benchmark/ground_truth.csv
+  inference_config: sciobraille-model-lab/configs/v1_optimized.yaml
+  output: sciobraille-model-lab/models/v1_optimized
+
+training:
+  epochs: 30
+  patience: 7
+  batch: 8
+  imgsz: 640
+  device: '0'
+  workers: 4
+  optimizer: AdamW
+  lr0: 0.0005
+  lrf: 0.1
+  momentum: 0.937
+  weight_decay: 0.0005
+  warmup_epochs: 2.0
+  warmup_momentum: 0.8
+  warmup_bias_lr: 0.01
+  freeze: 10
+  seed: 20260917
+  deterministic: true
+  amp: true
+  cache: false
+  save_period: 5
+  close_mosaic: 5
+
+geometric_augmentations:
+  degrees: 3.0
+  translate: 0.03
+  scale: 0.12
+  shear: 0.0
+  perspective: 0.0002
+  flipud: 0.0
+  fliplr: 0.0
+  mosaic: 0.10
+  mixup: 0.0
+  cutmix: 0.0
+  copy_paste: 0.0
+
+photometric_augmentations:
+  probability: 0.35
+  brightness_limit: 0.10
+  contrast_limit: 0.12
+  gamma_min: 0.92
+  gamma_max: 1.08
+  blur_probability: 0.08
+  noise_probability: 0.10
+  noise_sigma: 0.012
+  shadow_probability: 0.10
+  shadow_strength_min: 0.08
+  shadow_strength_max: 0.22
+  hsv_h: 0.0
+  hsv_s: 0.05
+  hsv_v: 0.12
+
+evaluation:
+  text_repeat: 3
+  validation_confidence: 0.001
+  validation_iou: 0.70
+  validation_tta: false
+  candidate_globs:
+    - weights/best.pt
+    - weights/last.pt
+    - weights/epoch*.pt
+  selection_priority:
+    - raw_cer
+    - raw_wer
+    - recall
+    - map50_95
+    - latency
+
+safety:
+  overwrite_production_model: false
+  allow_future_v2_dataset: false
+  allow_horizontal_flip: false
+  allow_vertical_flip: false
+  allow_pattern_changing_transforms: false

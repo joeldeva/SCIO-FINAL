@@ -1,0 +1,20 @@
+image,ground_truth,backend_raw,offline_raw,backend_CER,offline_CER,backend_latency,offline_latency
+C:/Users/devaj/Downloads/test sciobraille.jpeg,"jaihind
+india
+sciobraille
+visually impaired
+great project","jaihind
+india
+sciobraille
+isually impaired
+great project","jaihind
+india
+sciobraille
+isually impaired
+great project",0.017543859649122806,0.017543859649122806,148.69579998776317,435.72489998769015
+DMI.jpeg,"dmi college
+of engineering",,,1.0,1.0,203.7043000163976,800.8119000005536
+Flipped DMI.jpeg,"dmi college
+of engineering","dmi college
+of engineerin","dmi college
+of engineerin",0.038461538461538464,0.038461538461538464,194.67990001430735,489.63940000976436

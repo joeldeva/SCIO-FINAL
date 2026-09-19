@@ -4,7 +4,7 @@ Base path: `/api`. The scanner APIs (`/api/health`, `/api/scan-frame`, and `/ws/
 
 ## Authentication
 
-This backend has no existing authentication provider. The LMS router has a `require_lms_auth` dependency as a deliberate TODO boundary, but it does not invent a token or user identity. Before public deployment, protect every LMS endpoint with a real bearer-token validator or an authenticated API gateway, enforce that the authenticated user matches `userId`, and restrict class analytics to authorized teachers.
+**Security warning:** Run these LMS endpoints only on a trusted local network during prototype testing. This backend has no authentication provider. The `require_lms_auth` dependency is a deliberate TODO boundary and currently accepts every request. Do not expose this service publicly. Before deployment, protect every LMS endpoint with a real bearer-token validator or authenticated API gateway, enforce that the authenticated user matches `userId`, and restrict class analytics to authorized teachers.
 
 All request and response timestamps are Unix milliseconds. Progress `accuracy` is normalized from `0.0` to `1.0`; the Android client should divide its local percentage by 100 before upload.
 

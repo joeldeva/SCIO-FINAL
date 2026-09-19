@@ -19,6 +19,8 @@ android {
 
     def configuredBackendUrl = secureProperty('SCIOBRAILLE_BACKEND_URL')
             ?: 'https://replace-with-your-sciobraille-backend.example.com'
+    def configuredDebugBackendUrl = secureProperty('SCIOBRAILLE_DEBUG_BACKEND_URL')
+            ?: configuredBackendUrl
     def releaseStoreFile = secureProperty('SCIOBRAILLE_UPLOAD_STORE_FILE')
     def releaseStorePassword = secureProperty('SCIOBRAILLE_UPLOAD_STORE_PASSWORD')
     def releaseKeyAlias = secureProperty('SCIOBRAILLE_UPLOAD_KEY_ALIAS')
@@ -49,9 +51,11 @@ android {
 
     buildTypes {
         debug {
+            buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredDebugBackendUrl}\""
             manifestPlaceholders = [usesCleartextTraffic: 'true']
         }
         release {
+            buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredBackendUrl}\""
             minifyEnabled true
             if (hasReleaseSigning) {
                 signingConfig signingConfigs.upload
@@ -98,7 +102,7 @@ dependencies {
     implementation 'androidx.room:room-runtime:2.8.4'
     implementation 'androidx.room:room-ktx:2.8.4'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-    implementation 'org.tensorflow:tensorflow-lite:2.17.0'
+    implementation 'com.google.ai.edge.litert:litert:1.4.1'
     ksp 'androidx.room:room-compiler:2.8.4'
 
     testImplementation 'junit:junit:4.13.2'

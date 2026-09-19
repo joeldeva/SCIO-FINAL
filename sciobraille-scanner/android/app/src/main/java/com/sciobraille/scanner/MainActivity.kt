@@ -98,9 +98,13 @@ import kotlin.random.Random
 private const val CAMERA_PERMISSION_REQUEST = 42
 private const val SCAN_INTERVAL_MS = 350L
 private const val MAX_IN_FLIGHT_FRAMES = 2
+private const val SOCKET_RESPONSE_TIMEOUT_MS = 5_000L
 private const val FALLBACK_IMAGE_SIZE = 640
 private const val FALLBACK_CONFIDENCE = 0.35
-private const val FALLBACK_IOU = 0.45
+private const val FALLBACK_DUPLICATE_IOU = 0.70
+private const val FALLBACK_SPACE_GAP_MULTIPLIER = 1.8
+private const val FALLBACK_SPACE_WIDTH_MULTIPLIER = 1.35
+private const val FALLBACK_HISTORY_SIZE = 5
 
 private object ScioColors {
     const val BACKGROUND = 0xFFFCF9F8.toInt()
@@ -160,6 +164,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var isScanning = false
     private var isFrameInFlight = false
     private var pendingFrames = 0
+    private var pendingSinceMs = 0L
     private var lastSocketAttemptMs = 0L
     private var torchOn = false
     private var lastOutput = ""
@@ -168,10 +173,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var scanPracticePending = false
     private var scanPracticeLessonId = "level-6-scan-own-page"
     private var textToSpeech: TextToSpeech? = null
+    private var isTtsReady = false
     private val historyEntries = mutableListOf<HistoryEntry>()
     private val fallbackDetector by lazy { OfflineBrailleDetector(this) }
     private val lmsRepository by lazy { LmsRepository.getInstance(this) }
-    private val lmsAudioManager by lazy { LmsAudioManager { textToSpeech } }
+    private val lmsAudioManager by lazy { LmsAudioManager { textToSpeech.takeIf { isTtsReady } } }
     private val lmsHapticManager by lazy { LmsHapticManager(this) }
     private val entitlementManager by lazy { EntitlementManager(this) }
     private val milestoneManager by lazy { MilestoneManager(this, lmsRepository) }
@@ -212,7 +218,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
+        isTtsReady = status == TextToSpeech.SUCCESS
+        if (isTtsReady) {
             lmsAudioManager.configureDefaults()
         }
     }
@@ -3073,22 +3080,29 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener(
             {
-                val provider = providerFuture.get()
-                val preview = Preview.Builder().build().also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
+                runCatching {
+                    val provider = providerFuture.get()
+                    val preview = Preview.Builder().build().also {
+                        it.setSurfaceProvider(previewView.surfaceProvider)
+                    }
+                    imageCapture = ImageCapture.Builder()
+                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                        .setJpegQuality(75)
+                        .build()
+                    provider.unbindAll()
+                    camera = provider.bindToLifecycle(
+                        this,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        imageCapture
+                    )
+                }.onSuccess {
+                    frameOverlay.setStatus("Ready", false)
+                }.onFailure {
+                    imageCapture = null
+                    camera = null
+                    frameOverlay.setStatus("Camera unavailable", false)
                 }
-                imageCapture = ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                    .setJpegQuality(75)
-                    .build()
-                provider.unbindAll()
-                camera = provider.bindToLifecycle(
-                    this,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview,
-                    imageCapture
-                )
-                frameOverlay.setStatus("Ready", false)
             },
             ContextCompat.getMainExecutor(this)
         )
@@ -3103,8 +3117,15 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             )
             return
         }
+        if (imageCapture == null) {
+            frameOverlay.setStatus("Camera is not ready", false)
+            startCamera()
+            return
+        }
         isScanning = true
         pendingFrames = 0
+        pendingSinceMs = 0L
+        fallbackDetector.resetSession()
         openScanSocket()
         scanButton.text = "Stop"
         progress.visibility = View.VISIBLE
@@ -3118,6 +3139,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         isScanning = false
         isFrameInFlight = false
         pendingFrames = 0
+        fallbackDetector.resetSession()
         webSocket?.close(1000, "Stopped")
         webSocket = null
         progress.visibility = View.GONE
@@ -3140,12 +3162,22 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
                     pendingFrames = max(0, pendingFrames - 1)
-                    val payload = ScannerPayload.fromJson(text)
-                    runOnUiThread { renderPayload(payload) }
+                    if (pendingFrames == 0) pendingSinceMs = 0L
+                    val payload = ScannerPayload.fromJsonOrNull(text)
+                    runOnUiThread {
+                        if (payload == null) {
+                            frameOverlay.setStatus("Invalid server response. Using device fallback.", false)
+                            this@MainActivity.webSocket?.cancel()
+                            this@MainActivity.webSocket = null
+                        } else {
+                            renderPayload(payload)
+                        }
+                    }
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                     pendingFrames = 0
+                    pendingSinceMs = 0L
                     this@MainActivity.webSocket = null
                     runOnUiThread {
                         if (isScanning) frameOverlay.setStatus("Device fallback", true)
@@ -3154,6 +3186,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                     pendingFrames = 0
+                    pendingSinceMs = 0L
                     this@MainActivity.webSocket = null
                 }
             }
@@ -3173,7 +3206,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun captureAndScan() {
         val capture = imageCapture ?: return
         if (isFrameInFlight) return
-        if (webSocket != null && pendingFrames >= MAX_IN_FLIGHT_FRAMES) return
+        if (webSocket != null && pendingFrames >= MAX_IN_FLIGHT_FRAMES) {
+            if (pendingSinceMs > 0L && System.currentTimeMillis() - pendingSinceMs >= SOCKET_RESPONSE_TIMEOUT_MS) {
+                webSocket?.cancel()
+                webSocket = null
+                pendingFrames = 0
+                pendingSinceMs = 0L
+                frameOverlay.setStatus("Server timeout. Using device fallback.", false)
+            } else {
+                return
+            }
+        }
         if (webSocket == null && System.currentTimeMillis() - lastSocketAttemptMs > 3500) {
             openScanSocket()
         }
@@ -3192,6 +3235,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             val bytes = frameFile.readBytes()
                             val sent = webSocket?.send(bytes.toByteString()) == true
                             if (sent) {
+                                if (pendingFrames == 0) pendingSinceMs = System.currentTimeMillis()
                                 pendingFrames += 1
                             } else {
                                 val payload = fallbackDetector.detect(frameFile)
@@ -3261,7 +3305,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 createdAt = System.currentTimeMillis()
             )
         )
-        while (historyEntries.size > 50) historyEntries.removeLast()
+        while (historyEntries.size > 50) historyEntries.removeAt(historyEntries.lastIndex)
         saveHistory()
     }
 
@@ -3324,28 +3368,52 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun toggleTorch() {
+        val activeCamera = camera
+        if (activeCamera == null || !activeCamera.cameraInfo.hasFlashUnit()) {
+            torchOn = false
+            flashButton.text = "Flash"
+            toast("Flash is unavailable on this device")
+            return
+        }
         torchOn = !torchOn
-        camera?.cameraControl?.enableTorch(torchOn)
+        activeCamera.cameraControl.enableTorch(torchOn)
         flashButton.text = if (torchOn) "On" else "Flash"
     }
 
     private fun speakOutput() {
-        val text = lastOutput.ifBlank { return }
-        runCatching {
-            textToSpeech?.speak(text.replace('\n', '.'), TextToSpeech.QUEUE_FLUSH, null, "sciobraille-output")
-        }
+        speakText(lastOutput)
     }
 
     private fun copyOutput() {
-        val text = lastOutput.ifBlank { return }
+        copyText(lastOutput)
+    }
+
+    private fun shareOutput() {
+        shareText(lastOutput)
+    }
+
+    private fun speakText(value: String) {
+        val text = value.ifBlank { return }
+        if (!isTtsReady) {
+            toast("Text to speech is unavailable")
+            return
+        }
+        runCatching {
+            textToSpeech?.speak(text.replace('\n', '.'), TextToSpeech.QUEUE_FLUSH, null, "sciobraille-output")
+        }.onFailure { toast("Could not read this scan") }
+    }
+
+    private fun copyText(value: String) {
+        val text = value.ifBlank { return }
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("Sciobraille output", text))
         toast("Copied")
     }
 
-    private fun shareOutput() {
-        val text = lastOutput.ifBlank { return }
-        startActivity(
+    private fun shareText(value: String) {
+        val text = value.ifBlank { return }
+        runCatching {
+            startActivity(
             Intent.createChooser(
                 Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
@@ -3353,7 +3421,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 },
                 "Share scan"
             )
-        )
+            )
+        }.onFailure { toast("No sharing app is available") }
     }
 
     private fun hasCameraPermission(): Boolean {
@@ -3385,6 +3454,16 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         textToSpeech?.shutdown()
         fallbackDetector.closeIfOpened()
         super.onDestroy()
+    }
+
+    override fun onStop() {
+        if (isScanning) stopScanning("Stopped")
+        if (torchOn) {
+            camera?.cameraControl?.enableTorch(false)
+            torchOn = false
+            flashButton.text = "Flash"
+        }
+        super.onStop()
     }
 
     private fun title(value: String): TextView = TextView(this).apply {
@@ -3516,6 +3595,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 typeface = Typeface.MONOSPACE
                 setTextColor(ScioColors.MUTED)
             })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(14), 0, 0)
+                addView(actionButton("Read", false) { speakText(entry.text) }, LinearLayout.LayoutParams(0, dp(48), 1f))
+                addView(actionButton("Copy", false) { copyText(entry.text) }, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                    marginStart = dp(8)
+                })
+                addView(actionButton("Share", false) { shareText(entry.text) }, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                    marginStart = dp(8)
+                })
+            })
         }
     }
 
@@ -3589,9 +3679,13 @@ data class ScannerPayload(
     val stable: Boolean,
     val detections: Int,
     val confidence: Double,
-    val boxes: List<DetectionBox>
+    val boxes: List<DetectionBox>,
+    val rawText: String = text,
+    val correctedText: String = text
 ) {
     companion object {
+        fun fromJsonOrNull(raw: String): ScannerPayload? = runCatching { fromJson(raw) }.getOrNull()
+
         fun fromJson(raw: String): ScannerPayload {
             val json = JSONObject(raw)
             return ScannerPayload(
@@ -3600,7 +3694,9 @@ data class ScannerPayload(
                 stable = json.optBoolean("stable", false),
                 detections = json.optInt("detections", json.optInt("num_detections", 0)),
                 confidence = json.optDouble("confidence", 0.0),
-                boxes = DetectionBox.fromJsonArray(json.optJSONArray("boxes"))
+                boxes = DetectionBox.fromJsonArray(json.optJSONArray("boxes")),
+                rawText = json.optString("raw_text", json.optString("text", "")),
+                correctedText = json.optString("corrected_text", json.optString("text", ""))
             )
         }
     }
@@ -3792,6 +3888,7 @@ class LevelProgressView(context: Context, private val progressPercent: Int) : Vi
 
 class OfflineBrailleDetector(private val context: Context) {
     private val labels = ('a'..'z').map { it.toString() }
+    private val history = mutableListOf<String>()
     private var openedInterpreter: Interpreter? = null
     private val interpreter: Interpreter
         get() {
@@ -3832,20 +3929,27 @@ class OfflineBrailleDetector(private val context: Context) {
         val displayBoxes = nmsBoxes.map { box ->
             box.copy(x1 = 1f - box.x2, x2 = 1f - box.x1)
         }
-        val text = decodeReadingOrder(displayBoxes)
+        val rawText = decodeReadingOrder(displayBoxes)
+        val (stableText, stable) = stabilize(rawText)
         return ScannerPayload(
             ok = true,
-            text = text,
-            stable = false,
+            text = stableText,
+            stable = stable,
             detections = nmsBoxes.size,
             confidence = nmsBoxes.map { it.confidence }.average().takeIf { !it.isNaN() } ?: 0.0,
-            boxes = displayBoxes
+            boxes = displayBoxes,
+            rawText = rawText,
+            correctedText = rawText
         )
     }
 
     fun closeIfOpened() {
         openedInterpreter?.close()
         openedInterpreter = null
+    }
+
+    fun resetSession() {
+        history.clear()
     }
 
     private fun loadModel(): MappedByteBuffer {
@@ -3944,7 +4048,7 @@ class OfflineBrailleDetector(private val context: Context) {
     private fun nonMaxSuppress(boxes: List<DetectionBox>): List<DetectionBox> {
         val selected = mutableListOf<DetectionBox>()
         for (box in boxes.sortedByDescending { it.confidence }) {
-            if (selected.none { iou(it, box) > FALLBACK_IOU }) selected.add(box)
+            if (selected.none { iou(it, box) >= FALLBACK_DUPLICATE_IOU }) selected.add(box)
         }
         return selected
     }
@@ -3966,15 +4070,79 @@ class OfflineBrailleDetector(private val context: Context) {
         val eps = max(avgHeight * 0.6f, 0.01f)
         val lines = mutableListOf<MutableList<DetectionBox>>()
         for (box in boxes.sortedBy { it.centerY }) {
-            val target = lines.minByOrNull { abs(it.map { item -> item.centerY }.average().toFloat() - box.centerY) }
-            if (target != null && abs(target.map { it.centerY }.average().toFloat() - box.centerY) <= eps) {
+            val target = lines.minByOrNull { abs(median(it.map { item -> item.centerY }) - box.centerY) }
+            if (target != null && abs(median(target.map { it.centerY }) - box.centerY) <= eps) {
                 target.add(box)
             } else {
                 lines.add(mutableListOf(box))
             }
         }
-        return lines.sortedBy { it.map { box -> box.centerY }.average() }
-            .joinToString("\n") { line -> line.sortedBy { it.centerX }.joinToString("") { it.label } }
+        return lines.sortedBy { median(it.map { box -> box.centerY }) }
+            .joinToString("\n") { line -> decodeLine(line) }
+    }
+
+    private fun decodeLine(line: List<DetectionBox>): String {
+        val sorted = line.sortedBy { it.centerX }
+        if (sorted.size < 2) return sorted.joinToString("") { it.label }
+        val gaps = sorted.zipWithNext { left, right -> right.centerX - left.centerX }
+        val medianGap = median(gaps)
+        val compactGaps = gaps.filter { it <= medianGap * 1.25f }
+        val cellGap = median(compactGaps.takeIf { it.isNotEmpty() } ?: gaps)
+        val medianWidth = median(sorted.map { it.x2 - it.x1 })
+        val spaceThreshold = max(
+            cellGap * FALLBACK_SPACE_GAP_MULTIPLIER.toFloat(),
+            medianWidth * FALLBACK_SPACE_WIDTH_MULTIPLIER.toFloat()
+        )
+        return buildString {
+            append(sorted.first().label)
+            sorted.drop(1).forEachIndexed { index, box ->
+                if (gaps[index] > spaceThreshold) append(' ')
+                append(box.label)
+            }
+        }
+    }
+
+    private fun stabilize(text: String): Pair<String, Boolean> {
+        if (text.isNotBlank()) {
+            val previous = history.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+            if (!previous.isNullOrBlank() && textOverlapRatio(text, previous) < 0.3) history.clear()
+            history.add(text)
+            while (history.size > FALLBACK_HISTORY_SIZE) history.removeAt(0)
+        }
+        if (history.isEmpty()) return text to false
+        val winner = history.groupingBy { it }.eachCount().maxByOrNull { it.value }
+        return (winner?.key ?: text) to ((winner?.value ?: 0) >= 2)
+    }
+
+    private fun textOverlapRatio(left: String, right: String): Double {
+        val a = left.lowercase(Locale.US).filter { it.isLetterOrDigit() }
+        val b = right.lowercase(Locale.US).filter { it.isLetterOrDigit() }
+        if (a.isEmpty() || b.isEmpty()) return 0.0
+        val previous = IntArray(b.length + 1) { it }
+        a.forEachIndexed { leftIndex, leftChar ->
+            var diagonal = previous[0]
+            previous[0] = leftIndex + 1
+            b.forEachIndexed { rightIndex, rightChar ->
+                val old = previous[rightIndex + 1]
+                previous[rightIndex + 1] = min(
+                    min(previous[rightIndex + 1] + 1, previous[rightIndex] + 1),
+                    diagonal + if (leftChar == rightChar) 0 else 1
+                )
+                diagonal = old
+            }
+        }
+        return 1.0 - previous[b.length].toDouble() / max(a.length, b.length).toDouble()
+    }
+
+    private fun median(values: List<Float>): Float {
+        if (values.isEmpty()) return 0f
+        val sorted = values.sorted()
+        val middle = sorted.size / 2
+        return if (sorted.size % 2 == 0) {
+            (sorted[middle - 1] + sorted[middle]) / 2f
+        } else {
+            sorted[middle]
+        }
     }
 }
 

@@ -1,0 +1,32 @@
+version: 1
+purpose: Sciobraille V1 inference-only optimization
+model:
+  path: C:\Users\devaj\OneDrive\Documents\BRAILLEVISION\sciobraille-scanner\backend\model\best.pt
+  sha256: b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974
+accuracy_source: raw_text only
+benchmark_samples: 3
+configuration:
+  confidence: 0.5
+  iou: 0.5
+  preprocessing: current_production
+  tta: true
+  line_clustering: adaptive
+  line_tolerance: 0.6
+  spacing_multiplier: 1.8
+  width_multiplier: 1.35
+  duplicate_handling: class_agnostic
+  duplicate_iou: 0.7
+  flip_strategy: never
+  imgsz: 640
+benchmark:
+  cer: 0.35200179937022047
+  wer: 0.46428571428571425
+  character_accuracy: 0.6479982006297796
+  word_accuracy: 0.5357142857142857
+  exact_sentence_accuracy: 0.0
+  average_latency_ms: 1445.4313666663236
+  median_latency_ms: 1243.948299990734
+  precision: 0.9582460504712151
+  recall: 0.9200539211777716
+  map50: 0.9577679623713978
+  map50_95: 0.6959098085990152

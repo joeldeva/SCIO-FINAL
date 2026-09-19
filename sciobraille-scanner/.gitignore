@@ -1,0 +1,22 @@
+# Local Android configuration and signing material
+android/local.properties
+*.jks
+*.keystore
+
+# Runtime databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Generated Android/Python output
+android/.gradle/
+android/**/build/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local environments and logs
+.venv/
+venv/
+*.log
