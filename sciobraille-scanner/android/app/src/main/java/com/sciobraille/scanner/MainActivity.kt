@@ -96,7 +96,6 @@ import kotlin.math.roundToInt
 import kotlin.random.Random
 
 private const val CAMERA_PERMISSION_REQUEST = 42
-private const val SCAN_INTERVAL_MS = 350L
 private const val MAX_IN_FLIGHT_FRAMES = 2
 private const val SOCKET_RESPONSE_TIMEOUT_MS = 5_000L
 private const val FALLBACK_IMAGE_SIZE = 640
@@ -196,14 +195,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             lmsSyncUserId(),
             canCloudSync = { entitlementManager.canUseCloudSync() }
         )
-    }
-
-    private val scanLoop = object : Runnable {
-        override fun run() {
-            if (!isScanning) return
-            captureAndScan()
-            mainHandler.postDelayed(this, SCAN_INTERVAL_MS)
-        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -3133,13 +3124,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         pendingSinceMs = 0L
         fallbackDetector.resetSession()
         openScanSocket()
-        scanButton.text = "Stop"
+        scanButton.text = "Scanning"
+        scanButton.isEnabled = false
         progress.visibility = View.VISIBLE
         statsText.text = "0 cells / 0% confidence / Scanning"
         frameOverlay.setStatus("Scanning Braille...", true)
-        mainHandler.removeCallbacks(scanLoop)
         captureAndScan()
-        mainHandler.postDelayed(scanLoop, SCAN_INTERVAL_MS)
     }
 
     private fun stopScanning(message: String) {
@@ -3152,9 +3142,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         isSocketConnected = false
         progress.visibility = View.GONE
         scanButton.text = "Scan"
+        scanButton.isEnabled = true
         statsText.text = "Scanner stopped"
         frameOverlay.setStatus(message, false)
-        mainHandler.removeCallbacks(scanLoop)
     }
 
     private fun openScanSocket() {
@@ -3183,7 +3173,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             this@MainActivity.webSocket = null
                             isSocketConnected = false
                         } else {
-                            renderPayload(payload)
+                            completeScan(payload)
                         }
                     }
                 }
@@ -3260,17 +3250,13 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                                 val payload = fallbackDetector.detect(frameFile)
                                 runOnUiThread {
                                     if (isScanning) {
-                                        renderPayload(payload)
-                                        frameOverlay.setStatus("Scanning on device...", true)
+                                        completeScan(payload)
                                     }
                                 }
                             }
                         } catch (error: Exception) {
                             runOnUiThread {
-                                frameOverlay.setStatus(
-                                    if (isScanning) "Scan failed. Retrying..." else "Scan failed",
-                                    isScanning
-                                )
+                                if (isScanning) finishScanError("Scan failed. Tap Scan to try again.")
                             }
                         } finally {
                             frameFile.delete()
@@ -3285,14 +3271,55 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 override fun onError(exception: ImageCaptureException) {
                     frameFile.delete()
                     isFrameInFlight = false
-                    progress.visibility = if (isScanning) View.VISIBLE else View.GONE
-                    frameOverlay.setStatus(
-                        if (isScanning) "Camera capture failed. Retrying..." else "Camera capture failed",
-                        isScanning
-                    )
+                    if (isScanning) finishScanError("Camera capture failed. Tap Scan to try again.")
                 }
             }
         )
+    }
+
+    private fun completeScan(payload: ScannerPayload) {
+        if (!isScanning) return
+        val finalText = payload.rawText.ifBlank { payload.text }.trim()
+        val finalPayload = payload.copy(
+            text = finalText,
+            rawText = finalText,
+            stable = true
+        )
+        isScanning = false
+        isFrameInFlight = false
+        pendingFrames = 0
+        pendingSinceMs = 0L
+        webSocket?.close(1000, "Scan complete")
+        webSocket = null
+        isSocketConnected = false
+        progress.visibility = View.GONE
+        scanButton.text = "Scan"
+        scanButton.isEnabled = true
+
+        renderPayload(finalPayload)
+        if (currentTab == AppTab.SCANNER) {
+            val confidencePercent = (finalPayload.confidence * 100).roundToInt()
+            statsText.text = "${finalPayload.detections} cells / $confidencePercent% confidence / Result ready"
+            frameOverlay.setStatus(
+                if (finalText.isBlank()) "No Braille found. Tap Scan to try again." else "Result ready",
+                false
+            )
+        }
+    }
+
+    private fun finishScanError(message: String) {
+        isScanning = false
+        isFrameInFlight = false
+        pendingFrames = 0
+        pendingSinceMs = 0L
+        webSocket?.cancel()
+        webSocket = null
+        isSocketConnected = false
+        progress.visibility = View.GONE
+        scanButton.text = "Scan"
+        scanButton.isEnabled = true
+        statsText.text = "Scan failed"
+        frameOverlay.setStatus(message, false)
     }
 
     private fun renderPayload(payload: ScannerPayload) {

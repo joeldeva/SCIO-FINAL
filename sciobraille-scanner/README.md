@@ -38,9 +38,11 @@ natural camera preview coordinates after text reconstruction.
 Final V2 backend inference uses confidence `0.25`, model NMS IoU `0.45`,
 class-agnostic duplicate IoU `0.70`, bilateral preprocessing, and no TTA. The
 Android offline model uses confidence `0.25` and the same 26-class order. A
-Scan tap captures the first frame immediately. Until WebSocket connection is
-open, frames run through the bundled offline model so an unavailable backend
-cannot block scanning.
+A Scan tap captures one frame immediately. The UI shows `Scanning` while that
+frame runs through the model, then locks one final result and stops
+automatically. Until WebSocket connection is open, the frame runs through the
+bundled offline model so an unavailable backend cannot block scanning. Tap
+Scan again to capture a new result.
 
 ## Android
 
