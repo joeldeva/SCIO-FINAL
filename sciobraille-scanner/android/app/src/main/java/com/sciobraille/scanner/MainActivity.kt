@@ -124,6 +124,11 @@ private object ScioColors {
     const val ERROR = 0xFFBA1A1A.toInt()
 }
 
+internal object ScannerTransportPolicy {
+    fun canSendToBackend(isSocketConnected: Boolean, hasSocket: Boolean): Boolean =
+        isSocketConnected && hasSocket
+}
+
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private lateinit var contentHost: FrameLayout
     private lateinit var scannerScreen: View
@@ -161,6 +166,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var camera: Camera? = null
     private var imageCapture: ImageCapture? = null
     private var webSocket: WebSocket? = null
+    private var isSocketConnected = false
     private var isScanning = false
     private var isFrameInFlight = false
     private var pendingFrames = 0
@@ -3130,9 +3136,10 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         scanButton.text = "Stop"
         progress.visibility = View.VISIBLE
         statsText.text = "0 cells / 0% confidence / Scanning"
-        frameOverlay.setStatus("Connecting...", true)
+        frameOverlay.setStatus("Scanning Braille...", true)
         mainHandler.removeCallbacks(scanLoop)
-        mainHandler.post(scanLoop)
+        captureAndScan()
+        mainHandler.postDelayed(scanLoop, SCAN_INTERVAL_MS)
     }
 
     private fun stopScanning(message: String) {
@@ -3142,8 +3149,10 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         fallbackDetector.resetSession()
         webSocket?.close(1000, "Stopped")
         webSocket = null
+        isSocketConnected = false
         progress.visibility = View.GONE
         scanButton.text = "Scan"
+        statsText.text = "Scanner stopped"
         frameOverlay.setStatus(message, false)
         mainHandler.removeCallbacks(scanLoop)
     }
@@ -3155,6 +3164,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             request,
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
+                    isSocketConnected = true
                     runOnUiThread {
                         if (isScanning) frameOverlay.setStatus("Scanning Braille...", true)
                     }
@@ -3165,10 +3175,13 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     if (pendingFrames == 0) pendingSinceMs = 0L
                     val payload = ScannerPayload.fromJsonOrNull(text)
                     runOnUiThread {
-                        if (payload == null) {
+                        if (!isScanning) {
+                            return@runOnUiThread
+                        } else if (payload == null) {
                             frameOverlay.setStatus("Invalid server response. Using device fallback.", false)
                             this@MainActivity.webSocket?.cancel()
                             this@MainActivity.webSocket = null
+                            isSocketConnected = false
                         } else {
                             renderPayload(payload)
                         }
@@ -3179,8 +3192,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     pendingFrames = 0
                     pendingSinceMs = 0L
                     this@MainActivity.webSocket = null
+                    isSocketConnected = false
                     runOnUiThread {
-                        if (isScanning) frameOverlay.setStatus("Device fallback", true)
+                        if (isScanning) frameOverlay.setStatus("Scanning on device...", true)
                     }
                 }
 
@@ -3188,6 +3202,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     pendingFrames = 0
                     pendingSinceMs = 0L
                     this@MainActivity.webSocket = null
+                    isSocketConnected = false
                 }
             }
         )
@@ -3206,13 +3221,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun captureAndScan() {
         val capture = imageCapture ?: return
         if (isFrameInFlight) return
-        if (webSocket != null && pendingFrames >= MAX_IN_FLIGHT_FRAMES) {
+        if (isSocketConnected && webSocket != null && pendingFrames >= MAX_IN_FLIGHT_FRAMES) {
             if (pendingSinceMs > 0L && System.currentTimeMillis() - pendingSinceMs >= SOCKET_RESPONSE_TIMEOUT_MS) {
                 webSocket?.cancel()
                 webSocket = null
+                isSocketConnected = false
                 pendingFrames = 0
                 pendingSinceMs = 0L
-                frameOverlay.setStatus("Server timeout. Using device fallback.", false)
+                frameOverlay.setStatus("Scanning on device...", true)
             } else {
                 return
             }
@@ -3233,24 +3249,34 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     networkExecutor.execute {
                         try {
                             val bytes = frameFile.readBytes()
-                            val sent = webSocket?.send(bytes.toByteString()) == true
+                            val sent = ScannerTransportPolicy.canSendToBackend(
+                                isSocketConnected,
+                                webSocket != null
+                            ) && webSocket?.send(bytes.toByteString()) == true
                             if (sent) {
                                 if (pendingFrames == 0) pendingSinceMs = System.currentTimeMillis()
                                 pendingFrames += 1
                             } else {
                                 val payload = fallbackDetector.detect(frameFile)
                                 runOnUiThread {
-                                    renderPayload(payload)
-                                    frameOverlay.setStatus("Offline fallback", true)
+                                    if (isScanning) {
+                                        renderPayload(payload)
+                                        frameOverlay.setStatus("Scanning on device...", true)
+                                    }
                                 }
                             }
                         } catch (error: Exception) {
-                            runOnUiThread { frameOverlay.setStatus(error.message ?: "Scan failed", false) }
+                            runOnUiThread {
+                                frameOverlay.setStatus(
+                                    if (isScanning) "Scan failed. Retrying..." else "Scan failed",
+                                    isScanning
+                                )
+                            }
                         } finally {
                             frameFile.delete()
                             runOnUiThread {
                                 isFrameInFlight = false
-                                progress.visibility = View.GONE
+                                progress.visibility = if (isScanning) View.VISIBLE else View.GONE
                             }
                         }
                     }
@@ -3259,8 +3285,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 override fun onError(exception: ImageCaptureException) {
                     frameFile.delete()
                     isFrameInFlight = false
-                    progress.visibility = View.GONE
-                    frameOverlay.setStatus(exception.message ?: "Camera capture failed", false)
+                    progress.visibility = if (isScanning) View.VISIBLE else View.GONE
+                    frameOverlay.setStatus(
+                        if (isScanning) "Camera capture failed. Retrying..." else "Camera capture failed",
+                        isScanning
+                    )
                 }
             }
         )

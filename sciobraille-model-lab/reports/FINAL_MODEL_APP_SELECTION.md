@@ -15,7 +15,7 @@ V1 remains available for rollback. No historical model or source dataset was del
 |---|---|---|
 | Backend PyTorch | `sciobraille-scanner/backend/model/best.pt` | `8e32d074e0edb12cf6667310dd45b5cb5b4b837979c80289b15028918e831e62` |
 | Android INT8 | `sciobraille-scanner/android/app/src/main/assets/best_int8.tflite` | `7e5cf70ecb47f868d69623c7eec8cbd25bc8a547ab242318f1e4a2450fb5561c` |
-| Final APK | `sciobraille-scanner/releases/Sciobraille-Final-V2-2026-09-25.apk` | `6374c98fa90da7b6799ee321097ba464b360e4bf6c99c1a0840d725c3faa2082` |
+| Final APK | `sciobraille-scanner/releases/Sciobraille-Final-V2-2026-09-25.apk` | `d39cab5273038d3aeb94a8b7374580c65a2462e5a79a474e1656861c08d3fd8b` |
 
 ## Rollback
 
@@ -50,6 +50,8 @@ The independent physical benchmark is still too small for broad production claim
 - Text is decoded in model coordinates before overlay coordinates are mapped back to the camera preview.
 - Generic English bigram scoring selects orientation. It does not replace detected characters.
 - Primary `text` uses stabilized `raw_text`. Optional spell output remains isolated in `corrected_text`.
+- Scan captures its first frame immediately. It uses offline V2 until the WebSocket has completed its connection.
+- The scanning indicator stays active while frames are processed. Late results cannot overwrite a stopped UI state.
 
 ## SSN Regression
 
@@ -61,7 +63,7 @@ The independent physical benchmark is still too small for broad production claim
 ## Verification
 
 - Backend tests: 30 passed.
-- Android debug unit tests: 15 passed.
+- Android debug unit tests: 18 passed.
 - Android debug APK build: passed.
 - Active backend and Android model hashes match V2 source artifacts.
 - Final releases directory contains one APK only.
@@ -70,7 +72,8 @@ The independent physical benchmark is still too small for broad production claim
 ## Deployment Artifact
 
 - File: `sciobraille-scanner/releases/Sciobraille-Final-V2-2026-09-25.apk`
-- Size: 51,360,465 bytes
+- Size: 36,685,247 bytes
+- Version: 1.0.1 (`versionCode` 2)
 - Package: `com.sciobraille.scanner`
 - Signing: Android debug certificate for direct device testing
 

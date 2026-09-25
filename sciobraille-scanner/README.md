@@ -30,18 +30,17 @@ The backend exposes:
 - `POST /api/scan-frame`
 - `WS /ws/scan`
 
-Live frames are horizontally mirrored before model inference by default so
-reverse-side Braille can be read without using an external image service. Set
-`BRAILLE_FLIP_HORIZONTAL=false` to disable this globally. For an image that is
-already flipped, call `POST /api/scan-frame?flip_horizontal=false` to prevent a
-second mirror operation. Detection boxes are mapped back to the natural camera
-preview coordinates.
+Live frames are evaluated in their original and horizontally mirrored
+orientations. Generic English letter-sequence scoring selects the orientation
+without replacing detected characters. Detection boxes are mapped back to the
+natural camera preview coordinates after text reconstruction.
 
-Final V1 backend inference uses confidence `0.50`, model NMS IoU `0.50`,
-class-agnostic duplicate IoU `0.70`, bilateral preprocessing, and TTA. The
-Android fallback keeps confidence `0.35` because the frozen export benchmark
-performed better at that threshold. Both paths use the same class order and
-text reconstruction rules.
+Final V2 backend inference uses confidence `0.25`, model NMS IoU `0.45`,
+class-agnostic duplicate IoU `0.70`, bilateral preprocessing, and no TTA. The
+Android offline model uses confidence `0.25` and the same 26-class order. A
+Scan tap captures the first frame immediately. Until WebSocket connection is
+open, frames run through the bundled offline model so an unavailable backend
+cannot block scanning.
 
 ## Android
 
