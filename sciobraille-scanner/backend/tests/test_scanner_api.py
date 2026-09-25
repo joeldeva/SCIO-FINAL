@@ -51,8 +51,8 @@ class ScannerApiTest(unittest.TestCase):
         body = health.json()
         self.assertEqual(26, body["classes"])
         self.assertEqual(list("abcdefghijklmnopqrstuvwxyz"), [body["class_names"][str(i)] for i in range(26)])
-        self.assertEqual(0.50, body["confidence"])
-        self.assertEqual(0.50, body["iou"])
+        self.assertEqual(0.25, body["confidence"])
+        self.assertEqual(0.45, body["iou"])
         self.assertEqual(0.70, body["duplicate_iou"])
 
     def test_scan_frame_response_contract(self) -> None:

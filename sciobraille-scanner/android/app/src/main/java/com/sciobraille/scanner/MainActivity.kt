@@ -100,7 +100,7 @@ private const val SCAN_INTERVAL_MS = 350L
 private const val MAX_IN_FLIGHT_FRAMES = 2
 private const val SOCKET_RESPONSE_TIMEOUT_MS = 5_000L
 private const val FALLBACK_IMAGE_SIZE = 640
-private const val FALLBACK_CONFIDENCE = 0.35
+private const val FALLBACK_CONFIDENCE = 0.25
 private const val FALLBACK_DUPLICATE_IOU = 0.70
 private const val FALLBACK_SPACE_GAP_MULTIPLIER = 1.8
 private const val FALLBACK_SPACE_WIDTH_MULTIPLIER = 1.35
@@ -3732,6 +3732,34 @@ data class DetectionBox(
     }
 }
 
+internal object BrailleOrientationSelector {
+    private val commonEnglishBigrams = setOf(
+        "th", "he", "in", "er", "an", "re", "on", "at", "en", "nd", "ti",
+        "es", "or", "te", "of", "ed", "is", "it", "al", "ar", "st", "to",
+        "nt", "ng", "se", "ha", "as", "ou", "io", "le", "ve", "co", "me",
+        "de", "hi", "ri", "ro", "ic", "ne", "ea", "ra", "ce", "li", "ch",
+        "ll", "be", "ma", "si", "om", "ur"
+    )
+
+    fun score(text: String): Int = text.lowercase()
+        .map { if (it.isLetter() || it == ' ') it else ' ' }
+        .joinToString("")
+        .split(Regex("\\s+"))
+        .sumOf { word ->
+            (0 until max(0, word.length - 1)).count { index ->
+                word.substring(index, index + 2) in commonEnglishBigrams
+            }
+        }
+}
+
+private data class OfflineCandidate(
+    val mirrored: Boolean,
+    val modelBoxes: List<DetectionBox>,
+    val displayBoxes: List<DetectionBox>,
+    val rawText: String,
+    val confidence: Double
+)
+
 class DetectionOverlayView(context: Context) : View(context) {
     private var boxes: List<DetectionBox> = emptyList()
     private val primaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -3902,21 +3930,53 @@ class OfflineBrailleDetector(private val context: Context) {
     fun detect(frameFile: File): ScannerPayload {
         val bitmap = BitmapFactory.decodeFile(frameFile.absolutePath)
             ?: return ScannerPayload(false, "", false, 0, 0.0, emptyList())
-        val mirrorMatrix = Matrix().apply { preScale(-1f, 1f) }
-        val mirrored = Bitmap.createBitmap(
-            bitmap,
-            0,
-            0,
-            bitmap.width,
-            bitmap.height,
-            mirrorMatrix,
-            true
-        )
-        val scaled = Bitmap.createScaledBitmap(mirrored, FALLBACK_IMAGE_SIZE, FALLBACK_IMAGE_SIZE, true)
-        val input = buildInput(scaled)
-        if (scaled !== mirrored) scaled.recycle()
-        if (mirrored !== bitmap) mirrored.recycle()
+        val selected = listOf(
+            inferCandidate(bitmap, mirroredInput = false),
+            inferCandidate(bitmap, mirroredInput = true)
+        ).maxWithOrNull(
+            compareBy<OfflineCandidate>(
+                { BrailleOrientationSelector.score(it.rawText) },
+                { it.modelBoxes.size },
+                { it.confidence },
+                { if (it.mirrored) 1 else 0 }
+            )
+        ) ?: OfflineCandidate(false, emptyList(), emptyList(), "", 0.0)
         bitmap.recycle()
+        android.util.Log.d(
+            "SciobrailleOffline",
+            "Model: ${BuildConfig.OFFLINE_MODEL_ASSET}, Auto mirror: ${selected.mirrored}, Kept: ${selected.modelBoxes.size}"
+        )
+        val (stableText, stable) = stabilize(selected.rawText)
+        return ScannerPayload(
+            ok = true,
+            text = stableText,
+            stable = stable,
+            detections = selected.modelBoxes.size,
+            confidence = selected.confidence,
+            boxes = selected.displayBoxes,
+            rawText = selected.rawText,
+            correctedText = selected.rawText
+        )
+    }
+
+    private fun inferCandidate(bitmap: Bitmap, mirroredInput: Boolean): OfflineCandidate {
+        val modelBitmap = if (mirroredInput) {
+            Bitmap.createBitmap(
+                bitmap,
+                0,
+                0,
+                bitmap.width,
+                bitmap.height,
+                Matrix().apply { preScale(-1f, 1f) },
+                true
+            )
+        } else {
+            bitmap
+        }
+        val scaled = Bitmap.createScaledBitmap(modelBitmap, FALLBACK_IMAGE_SIZE, FALLBACK_IMAGE_SIZE, true)
+        val input = buildInput(scaled)
+        if (scaled !== modelBitmap) scaled.recycle()
+        if (modelBitmap !== bitmap) modelBitmap.recycle()
         val outputTensor = interpreter.getOutputTensor(0)
         val outputBuffer = ByteBuffer.allocateDirect(outputTensor.numBytes()).order(ByteOrder.nativeOrder())
         interpreter.run(input, outputBuffer)
@@ -3927,25 +3987,22 @@ class OfflineBrailleDetector(private val context: Context) {
         val boxes = parseDetections(output, channels, anchors)
         val rawCount = boxes.size
         val nmsBoxes = nonMaxSuppress(boxes).take(80)
-        val suppressedCount = rawCount - nmsBoxes.size
         android.util.Log.d(
             "SciobrailleOffline",
-            "Model: ${BuildConfig.OFFLINE_MODEL_ASSET}, Parsed: $rawCount, Suppressed: $suppressedCount, Kept: ${nmsBoxes.size}"
+            "Model: ${BuildConfig.OFFLINE_MODEL_ASSET}, Mirror: $mirroredInput, Parsed: $rawCount, Kept: ${nmsBoxes.size}"
         )
-        val displayBoxes = nmsBoxes.map { box ->
-            box.copy(x1 = 1f - box.x2, x2 = 1f - box.x1)
+        val displayBoxes = if (mirroredInput) {
+            nmsBoxes.map { box -> box.copy(x1 = 1f - box.x2, x2 = 1f - box.x1) }
+        } else {
+            nmsBoxes
         }
-        val rawText = decodeReadingOrder(displayBoxes)
-        val (stableText, stable) = stabilize(rawText)
-        return ScannerPayload(
-            ok = true,
-            text = stableText,
-            stable = stable,
-            detections = nmsBoxes.size,
-            confidence = nmsBoxes.map { it.confidence }.average().takeIf { !it.isNaN() } ?: 0.0,
-            boxes = displayBoxes,
+        val rawText = decodeReadingOrder(nmsBoxes)
+        return OfflineCandidate(
+            mirrored = mirroredInput,
+            modelBoxes = nmsBoxes,
+            displayBoxes = displayBoxes,
             rawText = rawText,
-            correctedText = rawText
+            confidence = nmsBoxes.map { it.confidence }.average().takeIf { !it.isNaN() } ?: 0.0
         )
     }
 
