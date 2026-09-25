@@ -260,7 +260,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             setPadding(dp(5), dp(5), dp(5), dp(5))
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(TextView(this).apply {
-            text = "ScioBraille"
+            text = BuildConfig.APP_TITLE_LABEL
             setTextColor(ScioColors.PRIMARY_CONTAINER)
             textSize = 32f
             typeface = Typeface.DEFAULT_BOLD
@@ -3925,7 +3925,13 @@ class OfflineBrailleDetector(private val context: Context) {
         val channels = shape[1]
         val anchors = shape[2]
         val boxes = parseDetections(output, channels, anchors)
+        val rawCount = boxes.size
         val nmsBoxes = nonMaxSuppress(boxes).take(80)
+        val suppressedCount = rawCount - nmsBoxes.size
+        android.util.Log.d(
+            "SciobrailleOffline",
+            "Model: ${BuildConfig.OFFLINE_MODEL_ASSET}, Parsed: $rawCount, Suppressed: $suppressedCount, Kept: ${nmsBoxes.size}"
+        )
         val displayBoxes = nmsBoxes.map { box ->
             box.copy(x1 = 1f - box.x2, x2 = 1f - box.x1)
         }
@@ -3953,7 +3959,7 @@ class OfflineBrailleDetector(private val context: Context) {
     }
 
     private fun loadModel(): MappedByteBuffer {
-        context.assets.openFd("best_int8.tflite").use { descriptor ->
+        context.assets.openFd(BuildConfig.OFFLINE_MODEL_ASSET).use { descriptor ->
             FileInputStream(descriptor.fileDescriptor).use { input ->
                 return input.channel.map(
                     FileChannel.MapMode.READ_ONLY,
@@ -4047,8 +4053,9 @@ class OfflineBrailleDetector(private val context: Context) {
 
     private fun nonMaxSuppress(boxes: List<DetectionBox>): List<DetectionBox> {
         val selected = mutableListOf<DetectionBox>()
+        val threshold = BuildConfig.DUPLICATE_IOU_THRESHOLD.toDouble()
         for (box in boxes.sortedByDescending { it.confidence }) {
-            if (selected.none { iou(it, box) >= FALLBACK_DUPLICATE_IOU }) selected.add(box)
+            if (selected.none { iou(it, box) >= threshold }) selected.add(box)
         }
         return selected
     }

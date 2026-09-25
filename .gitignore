@@ -17,5 +17,13 @@
 **/*.sqlite
 **/*.sqlite3
 **/*.log
+**/*.cache
 **/.DS_Store
 **/Thumbs.db
+
+# V2 training checkpoints and duplicate export workspace. Keep locally; commit
+# final/candidate best checkpoints and canonical files under exports/v2_master.
+sciobraille-model-lab/models/v2_master/experiments/**/weights/epoch*.pt
+sciobraille-model-lab/models/v2_master/experiments/**/weights/last.pt
+sciobraille-model-lab/models/v2_master/best.onnx
+sciobraille-model-lab/models/v2_master/best_saved_model/

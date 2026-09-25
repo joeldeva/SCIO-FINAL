@@ -21,6 +21,10 @@ android {
             ?: 'https://replace-with-your-sciobraille-backend.example.com'
     def configuredDebugBackendUrl = secureProperty('SCIOBRAILLE_DEBUG_BACKEND_URL')
             ?: configuredBackendUrl
+    def configuredV2BackendUrl = secureProperty('SCIOBRAILLE_V2_BACKEND_URL')
+            ?: 'http://192.168.1.7:8089'
+    def configuredDuplicateIou = secureProperty('SCIOBRAILLE_DUPLICATE_IOU')
+            ?: '0.70'
     def releaseStoreFile = secureProperty('SCIOBRAILLE_UPLOAD_STORE_FILE')
     def releaseStorePassword = secureProperty('SCIOBRAILLE_UPLOAD_STORE_PASSWORD')
     def releaseKeyAlias = secureProperty('SCIOBRAILLE_UPLOAD_KEY_ALIAS')
@@ -35,7 +39,13 @@ android {
         versionCode 1
         versionName '1.0.0'
         buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredBackendUrl}\""
-        manifestPlaceholders = [usesCleartextTraffic: 'false']
+        buildConfigField 'String', 'OFFLINE_MODEL_ASSET', '"best_int8.tflite"'
+        buildConfigField 'String', 'APP_TITLE_LABEL', '"ScioBraille"'
+        buildConfigField 'float', 'DUPLICATE_IOU_THRESHOLD', '0.70f'
+        manifestPlaceholders = [
+            usesCleartextTraffic: 'false',
+            appLabel: 'Sciobraille Scanner'
+        ]
     }
 
     signingConfigs {
@@ -52,15 +62,41 @@ android {
     buildTypes {
         debug {
             buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredDebugBackendUrl}\""
-            manifestPlaceholders = [usesCleartextTraffic: 'true']
+            buildConfigField 'String', 'OFFLINE_MODEL_ASSET', '"best_int8.tflite"'
+            buildConfigField 'String', 'APP_TITLE_LABEL', '"ScioBraille"'
+            buildConfigField 'float', 'DUPLICATE_IOU_THRESHOLD', '0.70f'
+            manifestPlaceholders = [
+                usesCleartextTraffic: 'true',
+                appLabel: 'Sciobraille Scanner'
+            ]
+        }
+        v2Test {
+            initWith debug
+            applicationIdSuffix ".v2test"
+            versionNameSuffix "-v2test"
+            buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredV2BackendUrl}\""
+            buildConfigField 'String', 'OFFLINE_MODEL_ASSET', '"best_v2_int8.tflite"'
+            buildConfigField 'String', 'APP_TITLE_LABEL', '"ScioBraille V2 Test"'
+            buildConfigField 'float', 'DUPLICATE_IOU_THRESHOLD', "${configuredDuplicateIou}f"
+            manifestPlaceholders = [
+                usesCleartextTraffic: 'true',
+                appLabel: 'Sciobraille V2 Test'
+            ]
+            matchingFallbacks = ['debug']
         }
         release {
             buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredBackendUrl}\""
+            buildConfigField 'String', 'OFFLINE_MODEL_ASSET', '"best_int8.tflite"'
+            buildConfigField 'String', 'APP_TITLE_LABEL', '"ScioBraille"'
+            buildConfigField 'float', 'DUPLICATE_IOU_THRESHOLD', '0.70f'
+            manifestPlaceholders = [
+                usesCleartextTraffic: 'false',
+                appLabel: 'Sciobraille Scanner'
+            ]
             minifyEnabled true
             if (hasReleaseSigning) {
                 signingConfig signingConfigs.upload
             }
-            manifestPlaceholders = [usesCleartextTraffic: 'false']
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -76,6 +112,10 @@ android {
 
     buildFeatures {
         buildConfig true
+    }
+
+    sourceSets {
+        v2Test.assets.srcDir 'src/v2Test/assets'
     }
 }
 
