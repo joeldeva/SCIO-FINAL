@@ -14,7 +14,7 @@
 - **Validation Images:** 165
 - **Internal Test Images:** 179
 - **Total Retained Images:** 1784
-- **Total Bounding Boxes:** 1784
+- **Total Bounding Boxes:** 99,352
 
 ## Performance Metrics
 - **Validation mAP50-95:** 0.8050
@@ -28,4 +28,4 @@
 
 ## Verification
 - Loaded and verified via Ultralytics YOLO.
-- Production model `sciobraille-scanner/backend/model/best.pt` preserved with SHA-256 `b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974`.
+- Production model `sciobraille-scanner/backend/model/best.pt` uses this V2 checkpoint with SHA-256 `8e32d074e0edb12cf6667310dd45b5cb5b4b837979c80289b15028918e831e62`.

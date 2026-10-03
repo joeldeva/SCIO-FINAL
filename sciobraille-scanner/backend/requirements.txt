@@ -23,3 +23,4 @@ uvicorn
 websockets
 python-multipart
 pyspellchecker
+deep-translator>=1.11,<2

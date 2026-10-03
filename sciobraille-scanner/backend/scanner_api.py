@@ -28,7 +28,7 @@ from typing import Any
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from ultralytics import YOLO
 
@@ -40,8 +40,14 @@ try:
 except ImportError:
     SpellChecker = None
 
+try:
+    from deep_translator import GoogleTranslator
+except ImportError:
+    GoogleTranslator = None
+
 
 BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_SCANNER_PATH = BASE_DIR / "upload_scanner.html"
 MODEL_PATH = Path(os.environ.get("MODEL_PATH", BASE_DIR / "model" / "best.pt"))
 CONFIDENCE = float(os.environ.get("BRAILLE_CONF", "0.25"))
 IOU = float(os.environ.get("BRAILLE_IOU", "0.45"))
@@ -88,6 +94,9 @@ predict_lock = threading.Lock()
 client_histories: dict[str, deque[str]] = {}
 history_lock = threading.Lock()
 spell = SpellChecker() if SpellChecker is not None else None
+SUPPORTED_TRANSLATION_LANGUAGES = {
+    "en", "hi", "ta", "te", "ml", "kn", "es", "fr", "de", "zh-CN", "ja"
+}
 
 
 FUTURE_CLASS_SCHEMA = [
@@ -919,6 +928,13 @@ async def index() -> str:
     return HTML
 
 
+@app.get("/upload", response_class=HTMLResponse)
+async def upload_scanner() -> str:
+    if not UPLOAD_SCANNER_PATH.is_file():
+        raise HTTPException(status_code=500, detail="Upload scanner page is missing")
+    return UPLOAD_SCANNER_PATH.read_text(encoding="utf-8")
+
+
 @app.get("/health")
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
@@ -962,6 +978,65 @@ async def scan_frame(
             flip_horizontal,
             _history_for_client(client_id),
         )
+    )
+
+
+@app.post("/api/translate")
+async def translate_text(request: Request) -> JSONResponse:
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+    text = str(body.get("text", "")).strip()
+    source_lang = str(body.get("source_lang", "en")).strip() or "en"
+    target_lang = str(body.get("target_lang", "en")).strip() or "en"
+    if len(text) > 20_000:
+        raise HTTPException(status_code=413, detail="Text is too long to translate")
+    if target_lang not in SUPPORTED_TRANSLATION_LANGUAGES:
+        raise HTTPException(status_code=400, detail="Unsupported translation language")
+    if source_lang != "en":
+        raise HTTPException(status_code=400, detail="Only English source text is supported")
+    if not text or target_lang == "en":
+        return JSONResponse({"ok": True, "text": text, "source_text": text, "source_lang": source_lang, "target_lang": target_lang})
+    if GoogleTranslator is None:
+        return JSONResponse(
+            {
+                "ok": False,
+                "text": text,
+                "source_text": text,
+                "source_lang": source_lang,
+                "target_lang": target_lang,
+                "error": "Translation service is unavailable",
+            },
+            status_code=503,
+        )
+    try:
+        translated = await asyncio.to_thread(
+            GoogleTranslator(source=source_lang, target=target_lang).translate,
+            text,
+        )
+    except Exception:
+        return JSONResponse(
+            {
+                "ok": False,
+                "text": text,
+                "source_text": text,
+                "source_lang": source_lang,
+                "target_lang": target_lang,
+                "error": "Translation failed",
+            },
+            status_code=502,
+        )
+    return JSONResponse(
+        {
+            "ok": True,
+            "text": translated or text,
+            "source_text": text,
+            "source_lang": source_lang,
+            "target_lang": target_lang,
+        }
     )
 
 

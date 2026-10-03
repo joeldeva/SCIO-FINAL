@@ -15,6 +15,9 @@ class LmsCurriculumProviderTest {
         assertEquals(11, lessons.count { it.level == 5 })
         assertTrue(lessons.any { it.level == 5 && it.title == "Contraction: the" })
         assertTrue(lessons.any { it.level == 6 && it.id == "level-6-scan-own-page" })
+        assertEquals(3, lessons.count { it.level == 7 })
+        assertEquals(5, lessons.count { it.level == 8 })
+        assertTrue(lessons.any { it.id == "library-reading-3" && it.description.contains("danger") })
     }
 
     @Test

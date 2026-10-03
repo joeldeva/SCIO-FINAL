@@ -1,0 +1,38 @@
+[
+  {
+    "file": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\reports\\visualizations\\requested_model_comparison_20260926\\ssn_invente__v2_master.jpg",
+    "model": "v2_master",
+    "input": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\SSN INVENTE.png",
+    "flip_horizontal": false,
+    "raw_text": "ss invente",
+    "detections": 9,
+    "confidence": 0.5631
+  },
+  {
+    "file": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\reports\\visualizations\\requested_model_comparison_20260926\\sri_sairam_normal__v2_master.jpg",
+    "model": "v2_master",
+    "input": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\Sri Sairam  noramal.jpeg",
+    "flip_horizontal": true,
+    "raw_text": "iram",
+    "detections": 4,
+    "confidence": 0.5763
+  },
+  {
+    "file": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\reports\\visualizations\\requested_model_comparison_20260926\\ssn_invente__v1_previous.jpg",
+    "model": "v1_previous",
+    "input": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\SSN INVENTE.png",
+    "flip_horizontal": false,
+    "raw_text": "oite",
+    "detections": 4,
+    "confidence": 0.3719
+  },
+  {
+    "file": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\reports\\visualizations\\requested_model_comparison_20260926\\sri_sairam_normal__v1_previous.jpg",
+    "model": "v1_previous",
+    "input": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\Sri Sairam  noramal.jpeg",
+    "flip_horizontal": true,
+    "raw_text": "evam",
+    "detections": 4,
+    "confidence": 0.5669
+  }
+]

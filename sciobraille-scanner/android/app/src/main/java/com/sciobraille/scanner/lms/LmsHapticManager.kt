@@ -22,6 +22,17 @@ class LmsHapticManager(
         vibrate(pattern)
     }
 
+    fun cell(activeDots: Set<Int>) {
+        val dots = activeDots.filter { it in 1..6 }.sorted()
+        if (dots.isEmpty()) return
+        val pattern = mutableListOf(0L)
+        dots.forEachIndexed { index, _ ->
+            pattern += CELL_PULSE
+            if (index != dots.lastIndex) pattern += CELL_GAP
+        }
+        vibrate(pattern.toLongArray())
+    }
+
     fun success() {
         vibrate(longArrayOf(0, SHORT, GAP_SHORT, SHORT, GAP_SHORT, LONG))
     }
@@ -68,5 +79,7 @@ class LmsHapticManager(
         const val GAP_SHORT = 70L
         const val GAP_LONG = 120L
         const val GAP_MEDIUM = 100L
+        const val CELL_PULSE = 75L
+        const val CELL_GAP = 65L
     }
 }

@@ -1,6 +1,7 @@
 package com.sciobraille.scanner.lms
 
 import android.content.Context
+import com.sciobraille.scanner.tools.LearnerProfileStore
 
 enum class Milestone(val title: String) {
     DOT_EXPLORER_COMPLETE("Dot Explorer Complete"),
@@ -23,6 +24,7 @@ class MilestoneManager(
     private val repository: LmsRepository
 ) {
     private val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+    private val profileStore = LearnerProfileStore(context)
 
     suspend fun evaluateAndAward(): List<MilestoneAward> {
         val lessons = repository.getLessonsByLanguage(Language.ENGLISH)
@@ -60,12 +62,11 @@ class MilestoneManager(
         preferences.getLong(keyFor(milestone), 0L).takeIf { it > 0L }?.let { MilestoneAward(milestone, it) }
     }.sortedByDescending { it.awardedAt }
 
-    fun learnerName(): String = preferences.getString(KEY_LEARNER_NAME, null)?.trim().takeUnless { it.isNullOrBlank() } ?: "Learner"
+    fun learnerName(): String = profileStore.load().name.trim().ifBlank { "Learner" }
 
     private fun keyFor(milestone: Milestone): String = "certificate_${milestone.name}"
 
     companion object {
         private const val PREFERENCES = "sciobraille_lms_certificates"
-        private const val KEY_LEARNER_NAME = "learner_name"
     }
 }

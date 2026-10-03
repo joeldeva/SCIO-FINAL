@@ -72,6 +72,40 @@ class ScannerApiTest(unittest.TestCase):
             set(response.json()),
         )
 
+    def test_translation_contract_and_validation(self) -> None:
+        english = self.client.post(
+            "/api/translate",
+            json={"text": "hello", "target_lang": "en"},
+        )
+        unsupported = self.client.post(
+            "/api/translate",
+            json={"text": "hello", "target_lang": "xx"},
+        )
+        unsupported_source = self.client.post(
+            "/api/translate",
+            json={"text": "hello", "source_lang": "ta", "target_lang": "hi"},
+        )
+        malformed = self.client.post(
+            "/api/translate",
+            content=b"not-json",
+            headers={"content-type": "application/json"},
+        )
+
+        self.assertEqual(200, english.status_code)
+        self.assertEqual(
+            {
+                "ok": True,
+                "text": "hello",
+                "source_text": "hello",
+                "source_lang": "en",
+                "target_lang": "en",
+            },
+            english.json(),
+        )
+        self.assertEqual(400, unsupported.status_code)
+        self.assertEqual(400, unsupported_source.status_code)
+        self.assertEqual(400, malformed.status_code)
+
     def test_rejects_non_image_empty_corrupt_and_oversized_uploads(self) -> None:
         wrong_type = self.client.post(
             "/api/scan-frame",

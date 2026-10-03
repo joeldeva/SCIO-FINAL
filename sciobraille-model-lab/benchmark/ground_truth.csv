@@ -1,5 +1,5 @@
 id,image_path,ground_truth,benchmark_type,flip_horizontal,notes
-scio_known_01,C:/Users/devaj/Downloads/test sciobraille.jpeg,"jaihind
+scio_known_01,sciobraille-model-lab/benchmark/images/test_sciobraille.jpeg,"jaihind
 india
 sciobraille
 visually impaired

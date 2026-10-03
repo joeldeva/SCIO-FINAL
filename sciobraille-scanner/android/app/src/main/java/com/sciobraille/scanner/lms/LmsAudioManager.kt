@@ -72,6 +72,7 @@ class LmsAudioManager(
         runCatching {
             textToSpeechProvider()?.let { tts ->
                 tts.stop()
+                tts.language = Locale.US
                 tts.speak(cleaned, TextToSpeech.QUEUE_FLUSH, null, "sciobraille-lms")
             }
         }
