@@ -51,8 +51,8 @@ class ScannerApiTest(unittest.TestCase):
         body = health.json()
         self.assertEqual(26, body["classes"])
         self.assertEqual(list("abcdefghijklmnopqrstuvwxyz"), [body["class_names"][str(i)] for i in range(26)])
-        self.assertEqual(0.50, body["confidence"])
-        self.assertEqual(0.50, body["iou"])
+        self.assertEqual(0.25, body["confidence"])
+        self.assertEqual(0.45, body["iou"])
         self.assertEqual(0.70, body["duplicate_iou"])
 
     def test_scan_frame_response_contract(self) -> None:
@@ -71,6 +71,40 @@ class ScannerApiTest(unittest.TestCase):
             },
             set(response.json()),
         )
+
+    def test_translation_contract_and_validation(self) -> None:
+        english = self.client.post(
+            "/api/translate",
+            json={"text": "hello", "target_lang": "en"},
+        )
+        unsupported = self.client.post(
+            "/api/translate",
+            json={"text": "hello", "target_lang": "xx"},
+        )
+        unsupported_source = self.client.post(
+            "/api/translate",
+            json={"text": "hello", "source_lang": "ta", "target_lang": "hi"},
+        )
+        malformed = self.client.post(
+            "/api/translate",
+            content=b"not-json",
+            headers={"content-type": "application/json"},
+        )
+
+        self.assertEqual(200, english.status_code)
+        self.assertEqual(
+            {
+                "ok": True,
+                "text": "hello",
+                "source_text": "hello",
+                "source_lang": "en",
+                "target_lang": "en",
+            },
+            english.json(),
+        )
+        self.assertEqual(400, unsupported.status_code)
+        self.assertEqual(400, unsupported_source.status_code)
+        self.assertEqual(400, malformed.status_code)
 
     def test_rejects_non_image_empty_corrupt_and_oversized_uploads(self) -> None:
         wrong_type = self.client.post(

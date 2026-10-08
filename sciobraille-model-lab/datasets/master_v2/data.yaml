@@ -1,4 +1,4 @@
-path: C:/Users/devaj/OneDrive/Documents/BRAILLEVISION/sciobraille-model-lab/datasets/master_v2
+path: sciobraille-model-lab/datasets/master_v2
 train: images/train
 val: images/val
 test: images/test

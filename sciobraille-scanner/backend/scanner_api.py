@@ -28,7 +28,7 @@ from typing import Any
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from ultralytics import YOLO
 
@@ -40,11 +40,17 @@ try:
 except ImportError:
     SpellChecker = None
 
+try:
+    from deep_translator import GoogleTranslator
+except ImportError:
+    GoogleTranslator = None
+
 
 BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_SCANNER_PATH = BASE_DIR / "upload_scanner.html"
 MODEL_PATH = Path(os.environ.get("MODEL_PATH", BASE_DIR / "model" / "best.pt"))
-CONFIDENCE = float(os.environ.get("BRAILLE_CONF", "0.50"))
-IOU = float(os.environ.get("BRAILLE_IOU", "0.50"))
+CONFIDENCE = float(os.environ.get("BRAILLE_CONF", "0.25"))
+IOU = float(os.environ.get("BRAILLE_IOU", "0.45"))
 DUPLICATE_IOU = float(os.environ.get("BRAILLE_DUPLICATE_IOU", "0.70"))
 IMGSZ = int(os.environ.get("BRAILLE_IMGSZ", "640"))
 MAX_UPLOAD_BYTES = int(os.environ.get("BRAILLE_MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
@@ -55,7 +61,7 @@ ENHANCE_IMAGE = os.environ.get("BRAILLE_ENHANCE", "true").strip().lower() in {
     "yes",
     "on",
 }
-AUGMENT_INFERENCE = os.environ.get("BRAILLE_AUGMENT", "true").strip().lower() in {
+AUGMENT_INFERENCE = os.environ.get("BRAILLE_AUGMENT", "false").strip().lower() in {
     "1",
     "true",
     "yes",
@@ -65,6 +71,12 @@ HISTORY_SIZE = int(os.environ.get("BRAILLE_HISTORY", "5"))
 SPACE_GAP_MULTIPLIER = float(os.environ.get("BRAILLE_SPACE_GAP_MULTIPLIER", "1.8"))
 SPACE_WIDTH_MULTIPLIER = float(os.environ.get("BRAILLE_SPACE_WIDTH_MULTIPLIER", "1.35"))
 FLIP_HORIZONTAL = os.environ.get("BRAILLE_FLIP_HORIZONTAL", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+AUTO_ORIENTATION = os.environ.get("BRAILLE_AUTO_ORIENTATION", "true").strip().lower() in {
     "1",
     "true",
     "yes",
@@ -82,6 +94,9 @@ predict_lock = threading.Lock()
 client_histories: dict[str, deque[str]] = {}
 history_lock = threading.Lock()
 spell = SpellChecker() if SpellChecker is not None else None
+SUPPORTED_TRANSLATION_LANGUAGES = {
+    "en", "hi", "ta", "te", "ml", "kn", "es", "fr", "de", "zh-CN", "ja"
+}
 
 
 FUTURE_CLASS_SCHEMA = [
@@ -737,13 +752,32 @@ def _stabilize_text(corrected: str, stabilization_history: deque[str]) -> tuple[
     return stable_text, votes >= 2
 
 
-def _predict(
+COMMON_ENGLISH_BIGRAMS = {
+    "th", "he", "in", "er", "an", "re", "on", "at", "en", "nd", "ti",
+    "es", "or", "te", "of", "ed", "is", "it", "al", "ar", "st", "to",
+    "nt", "ng", "se", "ha", "as", "ou", "io", "le", "ve", "co", "me",
+    "de", "hi", "ri", "ro", "ic", "ne", "ea", "ra", "ce", "li", "ch",
+    "ll", "be", "ma", "si", "om", "ur",
+}
+
+
+def _orientation_score(text: str) -> int:
+    letters = "".join(char for char in text.lower() if char.isalpha() or char == " ")
+    return sum(
+        1
+        for word in letters.split()
+        for index in range(len(word) - 1)
+        if word[index : index + 2] in COMMON_ENGLISH_BIGRAMS
+    )
+
+
+def _predict_single(
     frame: np.ndarray,
     include_image: bool = False,
-    flip_horizontal: bool | None = None,
+    flip_horizontal: bool = False,
     stabilization_history: deque[str] | None = None,
 ) -> dict[str, Any]:
-    should_flip = FLIP_HORIZONTAL if flip_horizontal is None else flip_horizontal
+    should_flip = flip_horizontal
     model_frame = _prepare_model_frame(frame, should_flip)
 
     def run_model(input_frame: np.ndarray):
@@ -769,22 +803,19 @@ def _predict(
 
     for box in result.boxes:
         x1, y1, x2, y2 = box.xyxy[0].tolist()
-        display_x1, display_x2 = (
-            (frame_w - x2, frame_w - x1) if should_flip else (x1, x2)
-        )
         label = names[int(box.cls[0])]
         conf = float(box.conf[0])
         dets.append(
             {
-                "x_center": (display_x1 + display_x2) / 2,
+                "x_center": (x1 + x2) / 2,
                 "y_center": (y1 + y2) / 2,
                 "label": label,
                 "width": x2 - x1,
                 "height": y2 - y1,
                 "confidence": conf,
-                "x1": display_x1,
+                "x1": x1,
                 "y1": y1,
-                "x2": display_x2,
+                "x2": x2,
                 "y2": y2,
             }
         )
@@ -792,10 +823,15 @@ def _predict(
     confidences = [float(det["confidence"]) for det in dets]
     boxes = []
     for det in dets:
-        display_x1 = float(det["x1"])
+        model_x1 = float(det["x1"])
         y1 = float(det["y1"])
-        display_x2 = float(det["x2"])
+        model_x2 = float(det["x2"])
         y2 = float(det["y2"])
+        display_x1, display_x2 = (
+            (frame_w - model_x2, frame_w - model_x1)
+            if should_flip
+            else (model_x1, model_x2)
+        )
         label = str(det["label"])
         conf = float(det["confidence"])
         boxes.append(
@@ -829,13 +865,13 @@ def _predict(
     raw_text = _reading_order_adaptive(dets)
     corrected = _correct_text(raw_text)
     stable_text, stable = _stabilize_text(
-        corrected,
+        raw_text,
         stabilization_history if stabilization_history is not None else deque(maxlen=HISTORY_SIZE),
     )
 
     payload: dict[str, Any] = {
         "ok": True,
-        "text": stable_text or corrected,
+        "text": stable_text or raw_text,
         "stable": stable,
         "detections": len(dets),
         "confidence": round(float(np.mean(confidences)), 4) if confidences else 0.0,
@@ -855,9 +891,48 @@ def _predict(
     return payload
 
 
+def _predict(
+    frame: np.ndarray,
+    include_image: bool = False,
+    flip_horizontal: bool | None = None,
+    stabilization_history: deque[str] | None = None,
+) -> dict[str, Any]:
+    if flip_horizontal is not None or not AUTO_ORIENTATION:
+        selected_flip = FLIP_HORIZONTAL if flip_horizontal is None else flip_horizontal
+        return _predict_single(frame, include_image, selected_flip, stabilization_history)
+
+    candidates = [
+        _predict_single(frame, include_image, False),
+        _predict_single(frame, include_image, True),
+    ]
+    selected = max(
+        candidates,
+        key=lambda payload: (
+            _orientation_score(str(payload["raw_text"])),
+            int(payload["detections"]),
+            float(payload["confidence"]),
+            payload["input_flipped_horizontal"] == FLIP_HORIZONTAL,
+        ),
+    )
+    stable_text, stable = _stabilize_text(
+        str(selected["raw_text"]),
+        stabilization_history if stabilization_history is not None else deque(maxlen=HISTORY_SIZE),
+    )
+    selected["text"] = stable_text or str(selected["raw_text"])
+    selected["stable"] = stable
+    return selected
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
     return HTML
+
+
+@app.get("/upload", response_class=HTMLResponse)
+async def upload_scanner() -> str:
+    if not UPLOAD_SCANNER_PATH.is_file():
+        raise HTTPException(status_code=500, detail="Upload scanner page is missing")
+    return UPLOAD_SCANNER_PATH.read_text(encoding="utf-8")
 
 
 @app.get("/health")
@@ -877,6 +952,7 @@ async def health() -> dict[str, Any]:
         "max_upload_bytes": MAX_UPLOAD_BYTES,
         "max_image_pixels": MAX_IMAGE_PIXELS,
         "flip_horizontal": FLIP_HORIZONTAL,
+        "auto_orientation": AUTO_ORIENTATION,
         "enhance_image": ENHANCE_IMAGE,
         "augment_inference": AUGMENT_INFERENCE,
         "space_gap_multiplier": SPACE_GAP_MULTIPLIER,
@@ -902,6 +978,65 @@ async def scan_frame(
             flip_horizontal,
             _history_for_client(client_id),
         )
+    )
+
+
+@app.post("/api/translate")
+async def translate_text(request: Request) -> JSONResponse:
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+    text = str(body.get("text", "")).strip()
+    source_lang = str(body.get("source_lang", "en")).strip() or "en"
+    target_lang = str(body.get("target_lang", "en")).strip() or "en"
+    if len(text) > 20_000:
+        raise HTTPException(status_code=413, detail="Text is too long to translate")
+    if target_lang not in SUPPORTED_TRANSLATION_LANGUAGES:
+        raise HTTPException(status_code=400, detail="Unsupported translation language")
+    if source_lang != "en":
+        raise HTTPException(status_code=400, detail="Only English source text is supported")
+    if not text or target_lang == "en":
+        return JSONResponse({"ok": True, "text": text, "source_text": text, "source_lang": source_lang, "target_lang": target_lang})
+    if GoogleTranslator is None:
+        return JSONResponse(
+            {
+                "ok": False,
+                "text": text,
+                "source_text": text,
+                "source_lang": source_lang,
+                "target_lang": target_lang,
+                "error": "Translation service is unavailable",
+            },
+            status_code=503,
+        )
+    try:
+        translated = await asyncio.to_thread(
+            GoogleTranslator(source=source_lang, target=target_lang).translate,
+            text,
+        )
+    except Exception:
+        return JSONResponse(
+            {
+                "ok": False,
+                "text": text,
+                "source_text": text,
+                "source_lang": source_lang,
+                "target_lang": target_lang,
+                "error": "Translation failed",
+            },
+            status_code=502,
+        )
+    return JSONResponse(
+        {
+            "ok": True,
+            "text": translated or text,
+            "source_text": text,
+            "source_lang": source_lang,
+            "target_lang": target_lang,
+        }
     )
 
 

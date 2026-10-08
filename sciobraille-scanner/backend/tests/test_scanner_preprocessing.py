@@ -1,5 +1,7 @@
 import unittest
 from collections import deque
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 
@@ -21,8 +23,43 @@ class ScannerPreprocessingTest(unittest.TestCase):
 
         self.assertTrue(np.array_equal(frame, unchanged))
 
+    def test_flipped_input_decodes_in_model_order_and_maps_overlay_back(self) -> None:
+        def tensor(value):
+            return np.asarray([value])
+
+        boxes = [
+            SimpleNamespace(
+                xyxy=[np.asarray([10.0, 10.0, 20.0, 30.0])],
+                cls=tensor(0),
+                conf=tensor(0.90),
+            ),
+            SimpleNamespace(
+                xyxy=[np.asarray([40.0, 10.0, 50.0, 30.0])],
+                cls=tensor(1),
+                conf=tensor(0.80),
+            ),
+        ]
+        result = SimpleNamespace(boxes=boxes)
+        frame = np.zeros((50, 100, 3), dtype=np.uint8)
+
+        with patch.object(scanner_api.model, "predict", return_value=[result]), patch.object(
+            scanner_api, "ENHANCE_IMAGE", False
+        ):
+            payload = scanner_api._predict(frame, flip_horizontal=True)
+
+        self.assertEqual("ab", payload["raw_text"])
+        self.assertEqual(0.8, payload["boxes"][0]["x1"])
+        self.assertEqual(0.9, payload["boxes"][0]["x2"])
+        self.assertTrue(payload["input_flipped_horizontal"])
+
     def test_dmi_acronym_is_not_spell_corrected(self) -> None:
         self.assertEqual("dmi college", scanner_api._correct_text("dmi college"))
+
+    def test_orientation_score_prefers_normal_english_order(self) -> None:
+        self.assertGreater(
+            scanner_api._orientation_score("ss invente"),
+            scanner_api._orientation_score("etnevni ss"),
+        )
 
     def test_stabilization_isolated_per_client_history(self) -> None:
         first = deque(maxlen=5)
@@ -106,11 +143,11 @@ class ScannerPreprocessingTest(unittest.TestCase):
         self.assertEqual(list("abcdefghijklmnopqrstuvwxyz"), ordered)
 
     def test_production_threshold_contract(self) -> None:
-        self.assertEqual(0.50, scanner_api.CONFIDENCE)
-        self.assertEqual(0.50, scanner_api.IOU)
+        self.assertEqual(0.25, scanner_api.CONFIDENCE)
+        self.assertEqual(0.45, scanner_api.IOU)
         self.assertEqual(0.70, scanner_api.DUPLICATE_IOU)
         self.assertEqual(640, scanner_api.IMGSZ)
-        self.assertTrue(scanner_api.AUGMENT_INFERENCE)
+        self.assertFalse(scanner_api.AUGMENT_INFERENCE)
         self.assertGreaterEqual(scanner_api.MAX_UPLOAD_BYTES, 1024 * 1024)
         self.assertGreaterEqual(scanner_api.MAX_IMAGE_PIXELS, 1_000_000)
 

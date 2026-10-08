@@ -1,0 +1,30 @@
+{
+  "promoted_at": "2026-09-25",
+  "reason": "User selected V2 YOLOv8s after controlled comparison on new independent SSN captures.",
+  "previous_backend_model": {
+    "sha256": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974",
+    "rollback_path": "../best_previous_B.pt",
+    "lab_path": "../../../../sciobraille-model-lab/models/v1_optimized/best.pt"
+  },
+  "new_backend_model": {
+    "sha256": "8e32d074e0edb12cf6667310dd45b5cb5b4b837979c80289b15028918e831e62",
+    "source_path": "../../../../sciobraille-model-lab/models/v2_master/best.pt",
+    "active_path": "../best.pt"
+  },
+  "previous_android_int8": {
+    "sha256": "9f6c45865ed2421041e8e46c865604ef953987382336c92bca91092d8eb5f4ad",
+    "rollback_path": "../best_saved_model/best_int8.tflite"
+  },
+  "new_android_int8": {
+    "sha256": "7e5cf70ecb47f868d69623c7eec8cbd25bc8a547ab242318f1e4a2450fb5561c",
+    "source_path": "../../../../sciobraille-model-lab/models/v2_master/best_saved_model/best_int8.tflite",
+    "active_path": "../../../android/app/src/main/assets/best_int8.tflite"
+  },
+  "runtime": {
+    "confidence": 0.25,
+    "iou": 0.45,
+    "duplicate_iou": 0.70,
+    "input_size": 640,
+    "horizontal_flip": true
+  }
+}

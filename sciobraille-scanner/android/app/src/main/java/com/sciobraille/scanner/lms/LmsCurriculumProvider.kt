@@ -40,6 +40,7 @@ object LmsCurriculumProvider {
         lessons += wordReadingLessons()
         lessons += contractionLessons()
         lessons += scanAndLearnLessons()
+        lessons += supplementaryPracticeLessons()
         lessons += comingSoonLanguageLessons()
         return lessons
     }
@@ -236,6 +237,50 @@ object LmsCurriculumProvider {
                 isPremium = true
             )
         )
+    }
+
+    private fun supplementaryPracticeLessons(): List<LessonEntity> {
+        val numberAndPunctuation = listOf(
+            "Numbers 1 to 5" to "12345",
+            "Numbers 6 to 0" to "67890",
+            "Common punctuation" to ",.;:!?-"
+        ).mapIndexed { index, (title, practiceText) ->
+            LessonEntity(
+                id = "library-symbols-${index + 1}",
+                level = 7,
+                title = title,
+                description = "Read and replay $practiceText in Grade 1 Braille.",
+                contentJson = LessonContent(
+                    type = "practice_library",
+                    goal = "Build confidence with numbers and punctuation.",
+                    word = practiceText
+                ).toJson(),
+                orderIndex = index + 1,
+                isPremium = false
+            )
+        }
+        val usefulWords = listOf(
+            "Useful labels" to "exit open stop room",
+            "Everyday words" to "hello please help ready",
+            "Safety words" to "danger fire safe call",
+            "Direction words" to "left right near there",
+            "School words" to "class study learn write"
+        ).mapIndexed { index, (title, practiceText) ->
+            LessonEntity(
+                id = "library-reading-${index + 1}",
+                level = 8,
+                title = title,
+                description = "Practice practical words: $practiceText.",
+                contentJson = LessonContent(
+                    type = "practice_library",
+                    goal = "Practice functional Grade 1 Braille reading.",
+                    word = practiceText
+                ).toJson(),
+                orderIndex = index + 1,
+                isPremium = false
+            )
+        }
+        return numberAndPunctuation + usefulWords
     }
 
     private fun scanContent(prompt: String): LessonContent {

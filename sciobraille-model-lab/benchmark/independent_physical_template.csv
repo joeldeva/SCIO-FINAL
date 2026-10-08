@@ -1,0 +1,3 @@
+id,image_path,ground_truth_transcription,document_id,capture_group_id,orientation,lighting,blur,distance,perspective,line_count,notes
+# Example schema template for independent real-world physical Braille collection.
+# Field collection must provide human-verified ground truth without spelling correction.

@@ -1,0 +1,220 @@
+{
+  "status": "finalized",
+  "selected_candidate": {
+    "name": "yolov8s_master_v2",
+    "arch": "YOLOv8s",
+    "checkpoint_sha256": "8e32d074e0edb12cf6667310dd45b5cb5b4b837979c80289b15028918e831e62",
+    "model_path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v2_master\\best.pt",
+    "validation_metrics": {
+      "split": "val",
+      "precision": 0.9649512754483991,
+      "recall": 0.9325750476449739,
+      "map50": 0.9628895060624012,
+      "map50_95": 0.8049528753091507,
+      "evaluation_seconds": 3.5591886000474915
+    },
+    "test_metrics": {
+      "split": "test",
+      "precision": 0.9685036135019551,
+      "recall": 0.9338969270558493,
+      "map50": 0.9534795541677069,
+      "map50_95": 0.7923628872112735,
+      "evaluation_seconds": 3.7963368999771774
+    },
+    "latency": {
+      "average_latency_ms": 15.65,
+      "median_latency_ms": 15.83,
+      "std_latency_ms": 1.04
+    },
+    "benchmark_metrics": {
+      "cer": 0.3963112910481332,
+      "wer": 0.5952380952380952,
+      "character_accuracy": 0.6036887089518669,
+      "word_accuracy": 0.4047619047619048,
+      "exact_sentence_accuracy": 0.0
+    }
+  },
+  "all_candidates": [
+    {
+      "key": "candidate_a",
+      "name": "yolov8s_master_v2",
+      "arch": "YOLOv8s",
+      "initialization": {
+        "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-scanner\\backend\\model\\best.pt",
+        "sha256": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974"
+      },
+      "run_dir": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v2_master\\experiments\\yolov8s",
+      "best_checkpoint": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v2_master\\experiments\\yolov8s\\weights\\best.pt",
+      "best_checkpoint_sha256": "8e32d074e0edb12cf6667310dd45b5cb5b4b837979c80289b15028918e831e62",
+      "best_checkpoint_size_bytes": 22516906,
+      "training_summary": {
+        "epochs_completed": 30,
+        "maximum_epochs": 30,
+        "stopped_early": false,
+        "best_map50_95_epoch": 23,
+        "best_map50_95": 0.79666,
+        "final_precision": 0.96163,
+        "final_recall": 0.93841,
+        "final_map50": 0.96188,
+        "final_map50_95": 0.79517,
+        "results_csv": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v2_master\\experiments\\yolov8s\\results.csv"
+      },
+      "validation_metrics": {
+        "split": "val",
+        "precision": 0.9649512754483991,
+        "recall": 0.9325750476449739,
+        "map50": 0.9628895060624012,
+        "map50_95": 0.8049528753091507,
+        "evaluation_seconds": 3.5591886000474915
+      },
+      "latency": {
+        "average_latency_ms": 15.65,
+        "median_latency_ms": 15.83,
+        "std_latency_ms": 1.04
+      },
+      "test_metrics": {
+        "split": "test",
+        "precision": 0.9685036135019551,
+        "recall": 0.9338969270558493,
+        "map50": 0.9534795541677069,
+        "map50_95": 0.7923628872112735,
+        "evaluation_seconds": 3.7963368999771774
+      },
+      "benchmark_metrics": {
+        "cer": 0.3963112910481332,
+        "wer": 0.5952380952380952,
+        "character_accuracy": 0.6036887089518669,
+        "word_accuracy": 0.4047619047619048,
+        "exact_sentence_accuracy": 0.0
+      }
+    },
+    {
+      "key": "candidate_b",
+      "name": "yolo11s_master_v2",
+      "arch": "YOLO11s",
+      "initialization": {
+        "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\yolo11s.pt",
+        "sha256": "85a76fe86dd8afe384648546b56a7a78580c7cb7b404fc595f97969322d502d5"
+      },
+      "run_dir": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v2_master\\experiments\\yolo11s",
+      "best_checkpoint": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v2_master\\experiments\\yolo11s\\weights\\best.pt",
+      "best_checkpoint_sha256": "30b81c5a8d703655b4958cf34e636e84d1fdcb32e0ec55ec74e49dfae8812b47",
+      "best_checkpoint_size_bytes": 19175514,
+      "training_summary": {
+        "epochs_completed": 30,
+        "maximum_epochs": 30,
+        "stopped_early": false,
+        "best_map50_95_epoch": 29,
+        "best_map50_95": 0.74412,
+        "final_precision": 0.94839,
+        "final_recall": 0.91623,
+        "final_map50": 0.94283,
+        "final_map50_95": 0.73723,
+        "results_csv": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v2_master\\experiments\\yolo11s\\results.csv"
+      },
+      "validation_metrics": {
+        "split": "val",
+        "precision": 0.9534835313159843,
+        "recall": 0.9153534721892894,
+        "map50": 0.9430948330549105,
+        "map50_95": 0.7505682074011137,
+        "evaluation_seconds": 3.6423291000537574
+      },
+      "latency": {
+        "average_latency_ms": 19.45,
+        "median_latency_ms": 19.51,
+        "std_latency_ms": 1.87
+      },
+      "test_metrics": {
+        "split": "test",
+        "precision": 0.9614500220306634,
+        "recall": 0.901707493646457,
+        "map50": 0.9362477670941686,
+        "map50_95": 0.742293459866362,
+        "evaluation_seconds": 3.7600597999989986
+      },
+      "benchmark_metrics": {
+        "cer": 0.5119208277103015,
+        "wer": 0.9166666666666666,
+        "character_accuracy": 0.4880791722896986,
+        "word_accuracy": 0.08333333333333333,
+        "exact_sentence_accuracy": 0.0
+      }
+    }
+  ],
+  "v1_baseline_comparison": {
+    "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-scanner\\backend\\model\\best.pt",
+    "sha256": "b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974",
+    "size_bytes": 22537258,
+    "val_metrics": {
+      "split": "val",
+      "precision": 0.9307770849880092,
+      "recall": 0.8745161866846977,
+      "map50": 0.9306681616778446,
+      "map50_95": 0.7504097633086732,
+      "evaluation_seconds": 4.442643900052644
+    },
+    "test_metrics": {
+      "split": "test",
+      "precision": 0.9374595196859803,
+      "recall": 0.8590709632045778,
+      "map50": 0.9181554373161858,
+      "map50_95": 0.7302363534411674,
+      "evaluation_seconds": 3.5914571000030264
+    },
+    "latency": {
+      "average_latency_ms": 15.92,
+      "median_latency_ms": 15.28,
+      "std_latency_ms": 1.51
+    },
+    "benchmark_metrics": {
+      "cer": 0.35200179937022047,
+      "wer": 0.46428571428571425,
+      "character_accuracy": 0.6479982006297796,
+      "word_accuracy": 0.5357142857142857,
+      "exact_sentence_accuracy": 0.0
+    }
+  },
+  "dataset": {
+    "data_yaml": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\datasets\\master_v2\\data.yaml",
+    "fingerprint": "9d115c9074676596aaaf7c01bcda68e81aba89b47ac237c9f8d4083495fbd699",
+    "counts": {
+      "images": 1784,
+      "labels": 1784
+    }
+  },
+  "environment": {
+    "timestamp_utc": "2026-09-24T16:15:46.947930+00:00",
+    "python": "3.10.0 (tags/v3.10.0:b494f59, Oct  4 2021, 19:00:18) [MSC v.1929 64 bit (AMD64)]",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "pytorch": "2.8.0+cu128",
+    "ultralytics": "8.4.14",
+    "opencv": "5.0.0",
+    "cuda_available": true,
+    "cuda_version": "12.8",
+    "cuda_device": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+    "cuda_vram_gb": 6.0
+  },
+  "training_config": {
+    "epochs": 30,
+    "patience": 7,
+    "batch": 8,
+    "imgsz": 640,
+    "device": "0",
+    "workers": 2,
+    "optimizer": "AdamW",
+    "lr0": 0.0005,
+    "lrf": 0.1,
+    "momentum": 0.937,
+    "weight_decay": 0.0005,
+    "warmup_epochs": 2.0,
+    "warmup_momentum": 0.8,
+    "warmup_bias_lr": 0.01,
+    "seed": 20260923,
+    "deterministic": true,
+    "amp": true,
+    "cache": false,
+    "save_period": 5,
+    "close_mosaic": 5
+  }
+}

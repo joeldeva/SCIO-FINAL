@@ -1,0 +1,138 @@
+{
+  "exports": {
+    "pytorch": {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\models\\v2_master\\best.pt",
+      "format": "PyTorch (.pt)",
+      "size_bytes": 22516906,
+      "size_mb": 21.47,
+      "sha256": "8e32d074e0edb12cf6667310dd45b5cb5b4b837979c80289b15028918e831e62"
+    },
+    "onnx": {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\exports\\v2_master\\onnx\\best.onnx",
+      "format": "ONNX (.onnx)",
+      "size_bytes": 44872636,
+      "size_mb": 42.79,
+      "sha256": "ae25ae51f45574704b3ce9a132dd7fbf740206dd3cfb4525c6ed55165509468a"
+    },
+    "tflite_float": {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\exports\\v2_master\\tflite_float\\best_float32.tflite",
+      "format": "Float32 TFLite (.tflite)",
+      "size_bytes": 44800102,
+      "size_mb": 42.72,
+      "sha256": "cc08d63240b6b7ee70ff33a27ff70deb26801469b48461797f8891f2c6754d64"
+    },
+    "tflite_int8": {
+      "path": "C:\\Users\\devaj\\OneDrive\\Documents\\BRAILLEVISION\\sciobraille-model-lab\\exports\\v2_master\\tflite_int8\\best_int8.tflite",
+      "format": "INT8 Quantized TFLite (.tflite)",
+      "size_bytes": 11551206,
+      "size_mb": 11.02,
+      "sha256": "7e5cf70ecb47f868d69623c7eec8cbd25bc8a547ab242318f1e4a2450fb5561c"
+    }
+  },
+  "tensor_specs": {
+    "pytorch": {
+      "input_shape": [
+        1,
+        3,
+        640,
+        640
+      ],
+      "input_dtype": "torch.float32",
+      "output_shape": [
+        1,
+        30,
+        8400
+      ],
+      "output_dtype": "torch.float32",
+      "classes": 26
+    },
+    "onnx": {
+      "input_name": "images",
+      "input_shape": [
+        1,
+        3,
+        640,
+        640
+      ],
+      "input_dtype": "tensor(float)",
+      "output_shape": [
+        1,
+        30,
+        8400
+      ],
+      "output_dtype": "tensor(float)"
+    },
+    "tflite_float": {
+      "input_shape": [
+        1,
+        640,
+        640,
+        3
+      ],
+      "input_dtype": "float32",
+      "output_shape": [
+        1,
+        30,
+        8400
+      ],
+      "output_dtype": "float32",
+      "quantization": [
+        0.0,
+        0
+      ]
+    },
+    "tflite_int8": {
+      "input_shape": [
+        1,
+        640,
+        640,
+        3
+      ],
+      "input_dtype": "float32",
+      "output_shape": [
+        1,
+        30,
+        8400
+      ],
+      "output_dtype": "float32",
+      "input_quantization": {
+        "scale": 0.0,
+        "zero_point": 0
+      },
+      "output_quantization": {
+        "scale": 0.0,
+        "zero_point": 0
+      }
+    }
+  },
+  "parity_results": {
+    "onnx_max_abs_diff": 7.972121238708496e-05,
+    "onnx_mean_abs_diff": 1.5004724264144898e-05,
+    "tflite_float_mean_abs_diff": 1.010315779925719e-08,
+    "tflite_int8_mean_abs_diff": 0.0002583627370768227,
+    "sample_count": 20
+  },
+  "latencies": {
+    "pytorch": {
+      "average_ms": 173.47,
+      "median_ms": 170.37,
+      "std_ms": 9.48
+    },
+    "onnx": {
+      "average_ms": 121.5,
+      "median_ms": 114.22,
+      "std_ms": 20.58
+    },
+    "tflite_float": {
+      "average_ms": 678.63,
+      "median_ms": 678.85,
+      "std_ms": 32.56
+    },
+    "tflite_int8": {
+      "average_ms": 319.84,
+      "median_ms": 319.85,
+      "std_ms": 28.15
+    }
+  },
+  "timestamp_utc": "2026-09-24 17:54:53 UTC"
+}

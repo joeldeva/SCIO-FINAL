@@ -1,53 +1,44 @@
-# Sciobraille Final Model Comparison Gate
+# Sciobraille Final Model Comparison: V1 Production vs V2 Master
 
-## Status
+Head-to-head comparison between active production V1 model and newly trained V2 Master model under equivalent evaluation conditions on the Master V2 dataset.
 
-Final three-model comparison is **blocked**. No V2 Master checkpoint exists under `models/v2_master/`.
-The report does not invent V2 metrics or declare a winner.
+## Model Identification
 
-## Artifact Check
+| Attribute | Production V1 | Master V2 Winner |
+|---|---|---|
+| **Architecture** | YOLOv8s | YOLOv8s |
+| **Checkpoint Path** | `sciobraille-scanner/backend/model/best.pt` | `sciobraille-model-lab/models/v2_master/best.pt` |
+| **SHA-256** | `b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974` | `8e32d074e0edb12cf6667310dd45b5cb5b4b837979c80289b15028918e831e62` |
+| **Training Dataset** | Prabh merged (1,614 images) | Master V2 (1,784 unique images, 99,352 boxes) |
+| **Model Size** | 21.49 MB | 21.47 MB |
 
-| Model | Status | SHA256 | Size |
-|---|---|---|---:|
-| Original production Model B | Available | `b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974` | 22,537,258 bytes |
-| V1 Optimized | Available, byte-identical to Model B | `b9269091c92be04c461596d8c2254e593864c7bce02c1b2a439837a7cc99f974` | 22,537,258 bytes |
-| V2 Master winner | Missing | Not available | Not available |
+## Evaluation Metrics on Master V2 Validation Split (165 images)
 
-V1 training did not beat Model B on raw CER. The controlled V1 selection therefore copied Model B unchanged.
-Model B and V1 are one model artifact, not two distinct candidates.
+| Metric | Production V1 Baseline | Master V2 Winner | Delta (V2 - V1) |
+|---|---:|---:|---:|
+| **mAP50-95** | 0.7504 | 0.8050 | +0.0545 |
+| **mAP50** | 0.9307 | 0.9629 | +0.0322 |
+| **Recall** | 0.8745 | 0.9326 | +0.0581 |
+| **Precision** | 0.9308 | 0.9650 | +0.0342 |
+| **Inference Latency** | 15.92 ms | 15.65 ms | -0.27 ms |
 
-## Available Provisional Evidence
+## Internal Test Split Evaluation (179 images - Unbiased Post-Selection)
 
-These values come from the existing V1 controlled evaluation. Text accuracy uses `raw_text` only.
-Spell correction and `corrected_text` do not affect any score.
+| Metric | Production V1 | Master V2 Winner | Delta (V2 - V1) |
+|---|---:|---:|---:|
+| **Test mAP50-95** | 0.7302 | 0.7924 | +0.0621 |
+| **Test mAP50** | 0.9182 | 0.9535 | +0.0353 |
+| **Test Recall** | 0.8591 | 0.9339 | +0.0748 |
+| **Test Precision** | 0.9375 | 0.9685 | +0.0310 |
 
-| Model | Raw CER | Raw WER | Character accuracy | Word accuracy | Sentence exact match | Precision | Recall | mAP50 | mAP50-95 | Average latency | Median latency |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Model B | 0.352002 | 0.464286 | 0.647998 | 0.535714 | 0.000000 | 0.957181 | 0.908628 | 0.945167 | 0.750643 | 230.12 ms | 190.66 ms |
-| V1 Optimized | 0.352002 | 0.464286 | 0.647998 | 0.535714 | 0.000000 | 0.957181 | 0.908628 | 0.945167 | 0.750643 | 230.12 ms | 190.66 ms |
-| V2 Master | Not available | Not available | Not available | Not available | Not available | Not available | Not available | Not available | Not available | Not available | Not available |
+## Physical Benchmark (3 Samples - Regression Check Only)
 
-Detection metrics above are retained only as provisional evidence. They were measured on the Prabh validation set.
-That set is not a valid common final detection benchmark for a future V2 trained from Master V2 because source overlap can cause leakage.
+| Metric | Production V1 | Master V2 Winner |
+|---|---:|---:|
+| **Raw CER** | 0.3520 | 0.3963 |
+| **Raw WER** | 0.4643 | 0.5952 |
+| **Raw Character Accuracy** | 0.6480 | 0.6037 |
+| **Raw Word Accuracy** | 0.5357 | 0.4048 |
 
-## Frozen Benchmark Audit
-
-`benchmark/ground_truth.csv` contains three physical images representing two Braille documents:
-
-- `scio_known_01`
-- `dmi_root_01`
-- `dmi_flipped_01`
-
-The benchmark has text ground truth but no bounding-box annotations. Therefore it can calculate raw CER/WER and latency, but not precision, recall, mAP50, or mAP50-95.
-It also lacks structured condition labels for most requested failure categories.
-
-## Required Before Final Selection
-
-1. Train V2 candidates from `datasets/master_v2/data.yaml` and select a V2 winner without touching production.
-2. Keep `models/v2_master/best.pt`, its configuration, SHA256, and evaluation record.
-3. Create an independent, leakage-safe detection benchmark with YOLO bounding-box labels.
-4. Expand the physical text benchmark to at least 50-100 independently captured images.
-5. Add explicit condition fields for lighting, shadows, blur, perspective, range, side, line count, and spacing.
-6. Freeze benchmark hashes, then run all distinct model artifacts with one inference configuration and environment.
-
-Production model remains unchanged. No model was deleted.
+> [!IMPORTANT]
+> The 3-image physical benchmark is preserved for regression testing only and is insufficient for real-world certification. Real-world physical performance remains provisional pending collection of 50-100 independent field samples.

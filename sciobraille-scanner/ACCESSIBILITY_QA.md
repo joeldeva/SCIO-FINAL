@@ -4,6 +4,20 @@ Date: 2026-09-19
 
 Scope: code-level audit of the Android LMS screens. Scanner camera behavior is outside this LMS pass.
 
+## Integrated Braille Tools
+
+| Screen | Checks and fixes |
+|---|---|
+| Braille Tools | Every feature has a descriptive card, explicit CTA, and text explanation. |
+| Braille Studio | Text input and visual output are labeled; cell count and dots are available as text; Previous, Repeat, Next, playback, copy, share, and tactile actions use large labeled controls. |
+| Tactile Explorer | Six 88dp targets expose dot number, row, column, active state, and visited state. Haptics are accompanied by speech and visible text. |
+| Story Reader | Camera/gallery commands, OCR status, recognized text, TTS, translation, and copy actions have visible labels. OCR failure preserves app state and gives a text error. |
+| Smart Assist | Speech recognition is optional; every routed destination remains reachable with visible controls when recognition is unavailable. |
+| Practice Library | Completion is written as text and not represented by color alone. |
+| Learner Profile | Every text field has a visible hint and accessibility description. |
+
+Remaining device checks: verify OEM speech-recognition availability, installed TTS voices for each translation language, vibration strength, ML Kit OCR on low-memory phones, and TalkBack traversal on the final physical device.
+
 ## Learn Home
 
 Status: checked.
