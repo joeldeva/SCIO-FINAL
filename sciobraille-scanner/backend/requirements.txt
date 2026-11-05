@@ -24,3 +24,6 @@ websockets
 python-multipart
 pyspellchecker
 deep-translator>=1.11,<2
+
+httpx>=0.28,<0.29
+Pillow>=11,<14

@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from fastapi import FastAPI
 
 import lms_api
 import scanner_api
@@ -15,7 +16,9 @@ class LmsApiTest(unittest.TestCase):
         self.store = lms_api.LmsStore(Path(self.temp_dir.name) / "lms-test.db")
         self.store_patch = patch.object(lms_api, "STORE", self.store)
         self.store_patch.start()
-        self.client = TestClient(scanner_api.app)
+        app = FastAPI()
+        app.include_router(lms_api.router)
+        self.client = TestClient(app)
 
     def tearDown(self) -> None:
         self.client.close()

@@ -21,6 +21,9 @@ import base64
 import asyncio
 import os
 import threading
+import io
+from PIL import Image, UnidentifiedImageError
+from PIL.Image import open as open_image_header
 from collections import Counter, deque
 from difflib import SequenceMatcher, get_close_matches
 from pathlib import Path
@@ -33,17 +36,15 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from ultralytics import YOLO
 
 from inference import preprocess
-from lms_api import router as lms_router
+from translation_service import service as translation_service, TranslationError
+from recognition_capabilities import capabilities
+from reading_order import aligned_centers
 
 try:
     from spellchecker import SpellChecker
 except ImportError:
     SpellChecker = None
 
-try:
-    from deep_translator import GoogleTranslator
-except ImportError:
-    GoogleTranslator = None
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -87,16 +88,16 @@ if not MODEL_PATH.is_file():
     raise RuntimeError(f"Braille model not found: {MODEL_PATH}")
 
 app = FastAPI(title="Sciobraille Live Scanner")
-app.include_router(lms_router)
+if os.environ.get("BRAILLE_ENABLE_LMS_API") == "development":
+    from lms_api import router as lms_router
+    app.include_router(lms_router)
 model = YOLO(str(MODEL_PATH))
 names = model.names
 predict_lock = threading.Lock()
 client_histories: dict[str, deque[str]] = {}
 history_lock = threading.Lock()
 spell = SpellChecker() if SpellChecker is not None else None
-SUPPORTED_TRANSLATION_LANGUAGES = {
-    "en", "hi", "ta", "te", "ml", "kn", "es", "fr", "de", "zh-CN", "ja"
-}
+
 
 
 FUTURE_CLASS_SCHEMA = [
@@ -534,6 +535,15 @@ def _decode_upload(file_bytes: bytes) -> np.ndarray:
         raise HTTPException(status_code=400, detail="Image frame is empty")
     if len(file_bytes) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Image frame exceeds upload limit")
+    try:
+        with open_image_header(io.BytesIO(file_bytes)) as header:
+            if header.width * header.height > MAX_IMAGE_PIXELS:
+                raise HTTPException(status_code=413, detail="Decoded image dimensions exceed limit")
+    except HTTPException: raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise HTTPException(status_code=413, detail="Decoded image dimensions exceed limit") from exc
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Could not decode image frame") from exc
     arr = np.frombuffer(file_bytes, np.uint8)
     frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if frame is None:
@@ -709,7 +719,7 @@ def _insert_adaptive_spaces(line: list[dict[str, float | str]]) -> list[str]:
 
 
 def _reading_order_adaptive(dets: list[dict[str, float | str]]) -> str:
-    lines = _cluster_lines(dets)
+    lines = _cluster_lines(aligned_centers(dets))
     decoded_lines: list[str] = []
     for line in lines:
         labels = _insert_adaptive_spaces(line)
@@ -740,6 +750,9 @@ def _history_for_client(client_id: str | None) -> deque[str]:
 
 
 def _stabilize_text(corrected: str, stabilization_history: deque[str]) -> tuple[str, bool]:
+    if not corrected:
+        stabilization_history.clear()
+        return "", False
     if corrected:
         if stabilization_history:
             previous_text, _ = Counter(stabilization_history).most_common(1)[0]
@@ -749,7 +762,7 @@ def _stabilize_text(corrected: str, stabilization_history: deque[str]) -> tuple[
     if not stabilization_history:
         return corrected, False
     stable_text, votes = Counter(stabilization_history).most_common(1)[0]
-    return stable_text, votes >= 2
+    return corrected, votes >= 2 and stable_text == corrected
 
 
 COMMON_ENGLISH_BIGRAMS = {
@@ -863,7 +876,7 @@ def _predict_single(
             )
 
     raw_text = _reading_order_adaptive(dets)
-    corrected = _correct_text(raw_text)
+    corrected = raw_text  # Do not silently rewrite recognized text with dictionary guesses.
     stable_text, stable = _stabilize_text(
         raw_text,
         stabilization_history if stabilization_history is not None else deque(maxlen=HISTORY_SIZE),
@@ -881,6 +894,7 @@ def _predict_single(
         "detector_classes": len(names),
         "supported_future_classes": FUTURE_CLASS_SCHEMA,
         "input_flipped_horizontal": should_flip,
+        "image_width": frame_w, "image_height": frame_h,
     }
 
     if annotated is not None:
@@ -941,7 +955,8 @@ async def health() -> dict[str, Any]:
     return {
         "ok": True,
         "status": "ok",
-        "model": str(MODEL_PATH),
+        "model": MODEL_PATH.name,
+        **capabilities(),
         "classes": len(names),
         "class_names": names,
         "future_class_schema": FUTURE_CLASS_SCHEMA,
@@ -969,7 +984,7 @@ async def scan_frame(
 ) -> JSONResponse:
     if frame.content_type and not frame.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image frames are accepted")
-    image = _decode_upload(await frame.read())
+    image = _decode_upload(await frame.read(MAX_UPLOAD_BYTES + 1))
     return JSONResponse(
         await asyncio.to_thread(
             _predict,
@@ -981,63 +996,53 @@ async def scan_frame(
     )
 
 
+@app.get("/api/capabilities")
+async def get_capabilities():
+    return capabilities()
+
+
+@app.get("/api/languages")
+async def translation_languages():
+    try:
+        languages = await translation_service.languages()
+        return {"ok": True, "provider": translation_service.provider,
+                "languages": [{"code": code, "name": name} for code, name in languages.items()],
+                "source_languages": ["en", "auto"], "offline": False}
+    except TranslationError as exc:
+        return JSONResponse({"ok": False, "error": str(exc), "languages": []}, status_code=exc.status_code)
+
+
 @app.post("/api/translate")
 async def translate_text(request: Request) -> JSONResponse:
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > 32_000: raise HTTPException(status_code=413, detail="Translation request is too large")
     try:
-        body = await request.json()
-    except Exception as exc:
+        import json
+        body = json.loads(raw)
+    except (ValueError, UnicodeDecodeError) as exc:
         raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="JSON body must be an object")
-    text = str(body.get("text", "")).strip()
-    source_lang = str(body.get("source_lang", "en")).strip() or "en"
-    target_lang = str(body.get("target_lang", "en")).strip() or "en"
-    if len(text) > 20_000:
-        raise HTTPException(status_code=413, detail="Text is too long to translate")
-    if target_lang not in SUPPORTED_TRANSLATION_LANGUAGES:
-        raise HTTPException(status_code=400, detail="Unsupported translation language")
-    if source_lang != "en":
-        raise HTTPException(status_code=400, detail="Only English source text is supported")
-    if not text or target_lang == "en":
-        return JSONResponse({"ok": True, "text": text, "source_text": text, "source_lang": source_lang, "target_lang": target_lang})
-    if GoogleTranslator is None:
-        return JSONResponse(
-            {
-                "ok": False,
-                "text": text,
-                "source_text": text,
-                "source_lang": source_lang,
-                "target_lang": target_lang,
-                "error": "Translation service is unavailable",
-            },
-            status_code=503,
-        )
+    if not isinstance(body, dict): raise HTTPException(status_code=400, detail="JSON body must be an object")
+    text, source_lang, target_lang = body.get("text", ""), body.get("source_lang", "en"), body.get("target_lang", "en")
+    if not all(isinstance(value, str) for value in (text, source_lang, target_lang)):
+        raise HTTPException(status_code=400, detail="Text and language codes must be strings")
+    text = text.strip()
+    if len(text) > 4000: raise HTTPException(status_code=413, detail="Translate at most 4000 characters at a time")
+    if source_lang not in {"en", "auto"}: raise HTTPException(status_code=400, detail="Source must be English or auto")
+    if not target_lang or len(target_lang) > 16 or not all(c.isalpha() or c == "-" for c in target_lang):
+        raise HTTPException(status_code=400, detail="Invalid target language")
+    response = {"ok": True, "text": text, "source_text": text, "source_lang": source_lang, "target_lang": target_lang}
     try:
-        translated = await asyncio.to_thread(
-            GoogleTranslator(source=source_lang, target=target_lang).translate,
-            text,
-        )
-    except Exception:
-        return JSONResponse(
-            {
-                "ok": False,
-                "text": text,
-                "source_text": text,
-                "source_lang": source_lang,
-                "target_lang": target_lang,
-                "error": "Translation failed",
-            },
-            status_code=502,
-        )
-    return JSONResponse(
-        {
-            "ok": True,
-            "text": translated or text,
-            "source_text": text,
-            "source_lang": source_lang,
-            "target_lang": target_lang,
-        }
-    )
+        if source_lang != target_lang and target_lang not in await translation_service.languages():
+            raise TranslationError("Unsupported translation language", 400)
+        if text and source_lang != target_lang:
+            result = await translation_service.translate(text, source_lang, target_lang)
+            response.update(text=result.text, provider=translation_service.provider, detected_source_lang=result.detected_source)
+        return JSONResponse(response)
+    except TranslationError as exc:
+        response.update(ok=False, text="", error=str(exc))
+        return JSONResponse(response, status_code=exc.status_code)
 
 
 @app.websocket("/ws/scan")
