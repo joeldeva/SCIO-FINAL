@@ -40,11 +40,11 @@ android {
         versionName '1.2.0-dev'
         buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredBackendUrl}\""
         buildConfigField 'String', 'OFFLINE_MODEL_ASSET', '"best_int8.tflite"'
-        buildConfigField 'String', 'APP_TITLE_LABEL', '"ScioBraille"'
+        buildConfigField 'String', 'APP_TITLE_LABEL', '"SCIOBRAILLE"'
         buildConfigField 'float', 'DUPLICATE_IOU_THRESHOLD', '0.70f'
         manifestPlaceholders = [
             usesCleartextTraffic: 'false',
-            appLabel: 'Sciobraille Scanner'
+            appLabel: 'SCIOBRAILLE'
         ]
     }
 
@@ -63,11 +63,11 @@ android {
         debug {
             buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredDebugBackendUrl}\""
             buildConfigField 'String', 'OFFLINE_MODEL_ASSET', '"best_int8.tflite"'
-            buildConfigField 'String', 'APP_TITLE_LABEL', '"ScioBraille"'
+            buildConfigField 'String', 'APP_TITLE_LABEL', '"SCIOBRAILLE"'
             buildConfigField 'float', 'DUPLICATE_IOU_THRESHOLD', '0.70f'
             manifestPlaceholders = [
                 usesCleartextTraffic: 'true',
-                appLabel: 'Sciobraille Scanner'
+                appLabel: 'SCIOBRAILLE'
             ]
         }
         v2Test {
@@ -87,11 +87,11 @@ android {
         release {
             buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredBackendUrl}\""
             buildConfigField 'String', 'OFFLINE_MODEL_ASSET', '"best_int8.tflite"'
-            buildConfigField 'String', 'APP_TITLE_LABEL', '"ScioBraille"'
+            buildConfigField 'String', 'APP_TITLE_LABEL', '"SCIOBRAILLE"'
             buildConfigField 'float', 'DUPLICATE_IOU_THRESHOLD', '0.70f'
             manifestPlaceholders = [
                 usesCleartextTraffic: 'false',
-                appLabel: 'Sciobraille Scanner'
+                appLabel: 'SCIOBRAILLE'
             ]
             minifyEnabled true
             if (hasReleaseSigning) {
@@ -113,6 +113,8 @@ android {
     buildFeatures {
         buildConfig true
     }
+
+    testOptions { unitTests.includeAndroidResources = true }
 
     androidResources { noCompress += ['tflite'] }
 
@@ -150,6 +152,7 @@ dependencies {
     implementation 'com.google.ai.edge.litert:litert:1.4.1'
     ksp 'androidx.room:room-compiler:2.8.4'
 
+    testImplementation 'org.robolectric:robolectric:4.17'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'
 }

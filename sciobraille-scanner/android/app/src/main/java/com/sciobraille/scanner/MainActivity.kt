@@ -218,6 +218,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var historyQuery = ""
     private var historyWindow = "All"
     private var lastAutoSpoken = ""
+    private var pendingLiveStart = false
     private var lastScanPayload: ScannerPayload? = null
     private fun backendUrl(): String = getSharedPreferences("sciobraille", MODE_PRIVATE).getString("backendUrl", BuildConfig.SCIOBRAILLE_BACKEND_URL).orEmpty()
     private fun onlineAllowed(): Boolean {
@@ -415,8 +416,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(TextView(this).apply {
             text = BuildConfig.APP_TITLE_LABEL
-            setTextColor(ScioColors.PRIMARY_CONTAINER)
-            textSize = 25f
+            setTextColor(ScioColors.PRIMARY)
+            textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
             includeFontPadding = false
             setPadding(dp(12), 0, 0, 0)
@@ -629,7 +630,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         translatedActions.addView(actionButton("Share Translation", false) { shareText(scannerResultState.translatedText) }, LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginStart = dp(10) })
         resultCard.addView(actionButton("Save result", false) {
             if (lastOutput.isBlank()) toast("Scan a page first") else {
-                lastScanPayload?.let { addHistoryIfNew(it.copy(text = lastOutput, rawText = lastOutput)) }
+                lastScanPayload?.let { addHistoryIfNew(it.copy(text = lastOutput, correctedText = lastOutput)) }
                 saveTranslationToLatestHistory(); toast("Result saved to History")
             }
         })
@@ -864,7 +865,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         learnScreen.visibility = if (tab == AppTab.LEARN) View.VISIBLE else View.GONE
         aboutScreen.visibility = if (tab == AppTab.ABOUT) View.VISIBLE else View.GONE
         if (tab != AppTab.SCANNER && isScanning) stopScanning("Stopped")
-        if (tab != AppTab.SCANNER) { imageAnalysis?.clearAnalyzer(); cameraProvider?.unbindAll(); imageCapture = null; torchOn = false }
+        if (tab != AppTab.SCANNER) { pendingLiveStart = false; imageAnalysis?.clearAnalyzer(); cameraProvider?.unbindAll(); imageCapture = null; torchOn = false }
         else if (hasCameraPermission()) startCamera()
         updateNav()
         if (tab == AppTab.HISTORY) rebuildHistory("")
@@ -4202,15 +4203,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         ScannerPreference.ONLINE_PREFERRED->"Online preferred"
         ScannerPreference.OFFLINE_PREFERRED->"Offline only"
     }
-    private fun applyAccessibleSizing(view:View) {
-        val scale=accessibilityPreferencesStore.load().textSize.scale
+    private fun applyAccessibleSizing(view:View, scale:Float=accessibilityPreferencesStore.load().textSize.scale) {
         if(view is TextView && view.getTag(R.id.base_text_size)==null) {
             view.setTag(R.id.base_text_size,view.textSize)
             view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,view.textSize*scale)
             if(view.isClickable || view is Button || view is EditText) view.minimumHeight=dp(48)
             if(scale>1f && view.layoutParams?.height?.let { it>0 }==true) view.layoutParams=view.layoutParams.apply { height=maxOf(dp(48),(height*scale).roundToInt()) }
         }
-        if(view is android.view.ViewGroup) for(index in 0 until view.childCount) applyAccessibleSizing(view.getChildAt(index))
+        if(view is android.view.ViewGroup) for(index in 0 until view.childCount) applyAccessibleSizing(view.getChildAt(index),scale)
     }
     private fun editRecognizedText() {
         if(scannerResultState.recognizedText.isBlank()) { toast("Scan or select a photo first"); return }
@@ -4221,7 +4221,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             if(edited.isNotBlank()) {
                 translationRequestId++; scannerResultState=scannerResultState.withRecognizedResult(scannerResultState.rawText,edited,edited)
                 lastOutput=edited; outputText.text=edited; renderTranslationState()
-                lastScanPayload?.let { addHistoryIfNew(it.copy(text=edited,rawText=edited,correctedText=edited)) }
+                lastScanPayload?.let { addHistoryIfNew(it.copy(text=edited,correctedText=edited)) }
             }
         }.setNegativeButton("Cancel",null).show()
     }
@@ -4257,18 +4257,20 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 provider.unbindAll()
                 camera=provider.bindToLifecycle(this,CameraSelector.DEFAULT_BACK_CAMERA,preview,imageCapture,imageAnalysis)
                 frameOverlay.setStatus("Ready",false)
-            }.onFailure { imageCapture=null; camera=null; frameOverlay.setStatus("Camera unavailable. You can still translate a photo.",false) }
+                if(pendingLiveStart) { pendingLiveStart=false; startScanning() }
+            }.onFailure { pendingLiveStart=false; imageCapture=null; camera=null; frameOverlay.setStatus("Camera unavailable. You can still translate a photo.",false) }
         },ContextCompat.getMainExecutor(this))
     }
     private fun startScanning() {
-        if(!hasCameraPermission()) { ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.CAMERA),CAMERA_PERMISSION_REQUEST); return }
-        if(imageCapture==null) { startCamera(); toast("Camera is starting. Tap Start when ready."); return }
+        if(!hasCameraPermission()) { pendingLiveStart=true; ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.CAMERA),CAMERA_PERMISSION_REQUEST); return }
+        if(imageCapture==null) { pendingLiveStart=true; startCamera(); frameOverlay.setStatus("Starting camera",false); return }
         scanGeneration++; liveMode=true; isScanning=true; isFrameInFlight=false; scanSession.reset(); lastAnalyzedAt=0
         photoPreview.visibility=View.GONE; photoPreview.setImageDrawable(null)
         scanButton.text="Pause"; scanButton.isEnabled=true; progress.visibility=View.VISIBLE
         statsText.text="Hold the page steady · English letters a–z"; frameOverlay.setStatus("Scanning",true)
     }
     private fun stopScanning(message:String) {
+        pendingLiveStart=false
         scanGeneration++; isScanning=false; isFrameInFlight=false; pendingFrames=0
         webSocket?.cancel(); webSocket=null; isSocketConnected=false
         if(::progress.isInitialized) progress.visibility=View.GONE
@@ -4436,7 +4438,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 if(preferences.autoSpeakTranslation) translateScannerResult(true) else if(preferences.autoSpeakScan) speakScannerOriginal()
             }
         }
-        val uncertain=if(payload.confidence<.55 && text.isNotBlank()) " · Uncertain: review text" else ""
+        val uncertainCells=payload.boxes.count { it.confidence<.55 }
+        val uncertain=if(text.isNotBlank() && (payload.confidence<.55 || uncertainCells>0)) " · Review $uncertainCells uncertain cells" else ""
         statsText.text="${payload.detections} cells · ${(payload.confidence*100).roundToInt()}% · ${payload.sourceMode}$uncertain"
         progress.visibility=View.GONE
         if(!liveMode) { isScanning=false; scanButton.text="Start"; scanButton.isEnabled=true; frameOverlay.setStatus(if(text.isBlank()) "No Braille found" else "Photo result · review before use",false) }
@@ -4475,7 +4478,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun addHistoryIfNew(payload: ScannerPayload) {
-        val text = payload.rawText.ifBlank { payload.text }.trim()
+        val text = payload.text.trim()
         if (text.isBlank() || text == lastHistoryText) return
         lastHistoryText = text
         historyEntries.add(
@@ -4730,8 +4733,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         ) {
             startCamera()
-        } else {
-            frameOverlay.setStatus("Camera permission denied", false)
+        } else if(requestCode == CAMERA_PERMISSION_REQUEST) {
+            pendingLiveStart=false
+            frameOverlay.setStatus("Camera permission denied. Use Photo to import an image.", false)
         }
     }
 
@@ -4754,7 +4758,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onStop() {
-        if (isScanning) stopScanning("Stopped")
+        if (isScanning || pendingLiveStart) stopScanning("Stopped")
         pauseBraillePlayback()
         multilingualTtsManager.pause()
         if (torchOn) {
@@ -5563,22 +5567,8 @@ class OfflineBrailleDetector(private val context: Context) {
         return intersection / max(0.0001f, areaA + areaB - intersection)
     }
 
-    private fun decodeReadingOrder(boxes: List<DetectionBox>): String {
-        if (boxes.isEmpty()) return ""
-        val avgHeight = boxes.map { it.y2 - it.y1 }.average().toFloat()
-        val eps = max(avgHeight * 0.6f, 0.01f)
-        val lines = mutableListOf<MutableList<DetectionBox>>()
-        for (box in boxes.sortedBy { it.centerY }) {
-            val target = lines.minByOrNull { abs(median(it.map { item -> item.centerY }) - box.centerY) }
-            if (target != null && abs(median(target.map { it.centerY }) - box.centerY) <= eps) {
-                target.add(box)
-            } else {
-                lines.add(mutableListOf(box))
-            }
-        }
-        return lines.sortedBy { median(it.map { box -> box.centerY }) }
-            .joinToString("\n") { line -> decodeLine(line) }
-    }
+    private fun decodeReadingOrder(boxes: List<DetectionBox>): String =
+        RecognitionMetadataAssembler.displayText(RecognitionMetadataAssembler.fromBoxes(boxes), false)
 
     private fun decodeLine(line: List<DetectionBox>): String {
         val sorted = line.sortedBy { it.centerX }

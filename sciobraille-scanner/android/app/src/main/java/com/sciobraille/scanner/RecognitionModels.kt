@@ -33,12 +33,14 @@ data class RecognitionCell(
 object RecognitionMetadataAssembler {
     fun fromBoxes(boxes: List<DetectionBox>): List<RecognitionCell> {
         if (boxes.isEmpty()) return emptyList()
+        val aligned = alignedCenters(boxes)
+        fun y(box: DetectionBox) = aligned.getValue(box)
         val averageHeight = boxes.map { it.y2 - it.y1 }.average().toFloat()
         val epsilon = max(averageHeight * 0.6f, 0.01f)
         val lines = mutableListOf<MutableList<DetectionBox>>()
-        boxes.sortedBy { it.centerYValue }.forEach { box ->
-            val target = lines.minByOrNull { line -> abs(median(line.map { it.centerYValue }) - box.centerYValue) }
-            if (target != null && abs(median(target.map { it.centerYValue }) - box.centerYValue) <= epsilon) {
+        boxes.sortedBy { y(it) }.forEach { box ->
+            val target = lines.minByOrNull { line -> abs(median(line.map { y(it) }) - y(box)) }
+            if (target != null && abs(median(target.map { y(it) }) - y(box)) <= epsilon) {
                 target += box
             } else {
                 lines += mutableListOf(box)
@@ -46,7 +48,7 @@ object RecognitionMetadataAssembler {
         }
 
         return buildList {
-            lines.sortedBy { median(it.map { box -> box.centerYValue }) }
+            lines.sortedBy { median(it.map { box -> y(box) }) }
                 .forEachIndexed { lineIndex, line ->
                     val sorted = line.sortedBy { it.centerXValue }
                     val wordBreaks = wordBreaks(sorted)
@@ -81,6 +83,21 @@ object RecognitionMetadataAssembler {
                 }
             }
         }
+    }
+
+    private fun alignedCenters(boxes: List<DetectionBox>): Map<DetectionBox, Float> {
+        val height=median(boxes.map { it.y2-it.y1 })
+        if(boxes.size<4 || height<=0) return boxes.associateWith { it.centerYValue }
+        val slopes=boxes.mapNotNull { left ->
+            boxes.mapNotNull { right ->
+                val dx=right.centerXValue-left.centerXValue
+                val dy=right.centerYValue-left.centerYValue
+                if(dx>height*.35f && dx<height*3f && abs(dy/dx)<=.36f) dx to dy/dx else null
+            }.minByOrNull { it.first }?.second
+        }
+        val slope=median(slopes)
+        val accepted=slopes.size>=3 && abs(slope)>=.03f && median(slopes.map { abs(it-slope) })<=.08f
+        return boxes.associateWith { it.centerYValue - (if(accepted) slope*it.centerXValue else 0f) }
     }
 
     private fun wordBreaks(sorted: List<DetectionBox>): List<Boolean> {
