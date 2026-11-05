@@ -61,3 +61,7 @@ def test_consistent_mild_skew_is_aligned_without_mutating_boxes():
     aligned=aligned_centers(boxes)
     assert max(x['y_center'] for x in aligned)-min(x['y_center'] for x in aligned)<1e-6
     assert boxes[-1]['y_center']==36
+
+def test_community_uses_bounded_async_http():
+    service=TranslationService('community',httpx.MockTransport(lambda _:httpx.Response(200,text='<div class="result-container">வணக்கம்</div>')))
+    assert run(service.translate('Hello','en','ta')).text=='வணக்கம்'

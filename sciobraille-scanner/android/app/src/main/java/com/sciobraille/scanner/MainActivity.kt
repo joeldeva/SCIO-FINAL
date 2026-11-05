@@ -588,6 +588,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         val audioControls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         audioControls.addView(actionButton("Pause", false) { multilingualTtsManager.pause() }, LinearLayout.LayoutParams(0,-2,1f))
         audioControls.addView(actionButton("Resume", false) { handleSpeechStatus(multilingualTtsManager.resume(), scannerResultState.translatedLanguage ?: AppLanguage.ENGLISH) }, LinearLayout.LayoutParams(0,-2,1f))
+        audioControls.addView(actionButton("Replay", false) { handleSpeechStatus(multilingualTtsManager.replay(), scannerResultState.translatedLanguage ?: AppLanguage.ENGLISH) }, LinearLayout.LayoutParams(0,-2,1f))
         audioControls.addView(actionButton("Stop", false) { multilingualTtsManager.stop() }, LinearLayout.LayoutParams(0,-2,1f))
         resultCard.addView(audioControls)
 
@@ -844,7 +845,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             background = rounded(ScioColors.BACKGROUND, ScioColors.OUTLINE, 1, 0)
         }
         homeNav = navItem("Home", "Home tab") { showTab(AppTab.HOME) }
-        scannerNav = navItem("Scanner", "Scanner tab") { showTab(AppTab.SCANNER) }
+        scannerNav = navItem("Scan", "Scanner tab") { showTab(AppTab.SCANNER) }
         historyNav = navItem("History", "History tab") { showTab(AppTab.HISTORY) }
         learnNav = navItem("Learn", "Learn Braille tab") { showTab(AppTab.LEARN) }
         aboutNav = navItem("Help", "Help and supported Braille systems") { showTab(AppTab.ABOUT) }
@@ -883,7 +884,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun updateNavItem(view: TextView, selected: Boolean) {
         view.isSelected = selected
         view.setTextColor(if (selected) Color.WHITE else ScioColors.MUTED)
-        view.typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.MONOSPACE
+        view.typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         view.background = if (selected) {
             rounded(ScioColors.PRIMARY_CONTAINER, null, 0, 16)
         } else {
@@ -4697,14 +4698,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun copyText(value: String) {
-        val text = value.ifBlank { return }
+        val text = value.ifBlank { toast("No text available yet"); return }
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("Sciobraille output", text))
         toast("Copied")
     }
 
     private fun shareText(value: String) {
-        val text = value.ifBlank { return }
+        val text = value.ifBlank { toast("No text available yet"); return }
         runCatching {
             startActivity(
             Intent.createChooser(
@@ -4824,7 +4825,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         contentDescription = accessibilityLabel
         gravity = Gravity.CENTER
         textSize = 13f
-        typeface = Typeface.MONOSPACE
+        typeface = Typeface.DEFAULT
         setOnClickListener { onClick() }
     }
 

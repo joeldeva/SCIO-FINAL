@@ -65,8 +65,16 @@ class TranslationService:
             async with self._slots:
                 if self.provider == 'community':
                     # Opt-in legacy adapter, for evaluation only; no SLA.
-                    from deep_translator import GoogleTranslator
-                    result = Translation(await asyncio.wait_for(asyncio.to_thread(GoogleTranslator(source=source,target=target).translate,text),15) or '')
+                    # Use the legacy provider's public web response with a cancellable,
+                    # bounded HTTP request. deep-translator's synchronous HTTP call has
+                    # no timeout and can leave worker threads blocked after cancellation.
+                    from bs4 import BeautifulSoup
+                    async with self._client() as client:
+                        response = await client.get('https://translate.google.com/m', params={'sl':source,'tl':target,'q':text})
+                        response.raise_for_status()
+                        element = BeautifulSoup(response.text, 'html.parser').select_one('.result-container, .t0')
+                        if element is None: raise TranslationError('Community provider response changed or is unavailable',502)
+                        result = Translation(element.get_text(strip=True))
                 else:
                     async with self._client() as client:
                         if self.provider == 'google':

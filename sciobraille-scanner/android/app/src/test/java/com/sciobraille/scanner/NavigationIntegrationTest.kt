@@ -34,9 +34,9 @@ class NavigationIntegrationTest {
  @Test fun homeHistoryHelpAndSettingsAreConnected() {
   val controller=Robolectric.buildActivity(MainActivity::class.java).setup().visible();val root=controller.get().window.decorView
   assertTrue(find(root,"Start live scan").isClickable);screenshot(root,"home-light")
-  find(root,"History").performClick();assertTrue(texts(root).any { it.isShown && it.text.startsWith("No scans yet") })
+  find(root,"Scan").performClick();screenshot(root,"scanner-empty");find(root,"History").performClick();assertTrue(texts(root).any { it.isShown && it.text.startsWith("No scans yet") })
   find(root,"Help").performClick();assertTrue(texts(root).any { it.isShown && it.text.contains("English") })
-  find(root,"Settings").performClick();val dialog=ShadowAlertDialog.getLatestAlertDialog();assertTrue(dialog.isShowing)
+  find(root,"Settings").performClick();val dialog=ShadowAlertDialog.getLatestAlertDialog();assertTrue(dialog.isShowing);screenshot(dialog.window!!.decorView,"settings")
   assertTrue(texts(dialog.window!!.decorView).any { it.text=="Backend address" });dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
   find(root,"Home").performClick();assertTrue(find(root,"Translate a Braille photo").isClickable);controller.pause().stop().destroy()
  }
