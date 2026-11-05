@@ -23,7 +23,7 @@ import java.io.File
 @LooperMode(LooperMode.Mode.PAUSED)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class NavigationIntegrationTest {
- @Before fun setup() { RuntimeEnvironment.getApplication().getSharedPreferences("sciobraille",Context.MODE_PRIVATE).edit().putBoolean("onboarded",true).commit() }
+ @Before fun setup() { org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(android.Manifest.permission.CAMERA);RuntimeEnvironment.getApplication().getSharedPreferences("sciobraille",Context.MODE_PRIVATE).edit().putBoolean("onboarded",true).commit() }
  private fun texts(view:View):List<TextView> = buildList { if(view is TextView) add(view);if(view is ViewGroup) for(i in 0 until view.childCount) addAll(texts(view.getChildAt(i))) }
  private fun find(root:View,label:String)=texts(root).first { it.text.toString()==label && it.isShown }
  private fun screenshot(root:View,name:String) {

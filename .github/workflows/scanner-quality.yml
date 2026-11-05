@@ -1,7 +1,7 @@
 name: SCIOBRAILLE build and verification
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main]
     paths: ['sciobraille-scanner/**', '.github/workflows/scanner-quality.yml']
   pull_request:
     paths: ['sciobraille-scanner/**', '.github/workflows/scanner-quality.yml']
