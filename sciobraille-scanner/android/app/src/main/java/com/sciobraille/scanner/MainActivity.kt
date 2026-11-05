@@ -38,6 +38,14 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.SeekBar
+import android.net.ConnectivityManager
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.AspectRatio
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.sciobraille.scanner.tools.LanguagePicker
+import android.util.Size
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
@@ -130,24 +138,6 @@ private const val FALLBACK_SPACE_GAP_MULTIPLIER = 1.8
 private const val FALLBACK_SPACE_WIDTH_MULTIPLIER = 1.35
 private const val FALLBACK_HISTORY_SIZE = 5
 
-private object ScioColors {
-    const val BACKGROUND = 0xFFFCF9F8.toInt()
-    const val SURFACE = 0xFFFFFFFF.toInt()
-    const val SURFACE_CONTAINER = 0xFFF0EDED.toInt()
-    const val SURFACE_HIGH = 0xFFEAE7E7.toInt()
-    const val TEXT = 0xFF1C1B1B.toInt()
-    const val MUTED = 0xFF474552.toInt()
-    const val OUTLINE = 0xFFC8C4D4.toInt()
-    const val PRIMARY = 0xFF584FB9.toInt()
-    const val PRIMARY_CONTAINER = 0xFF7169D4.toInt()
-    const val PRIMARY_FIXED = 0xFFE3DFFF.toInt()
-    const val SECONDARY = 0xFF8B4F31.toInt()
-    const val SECONDARY_CONTAINER = 0xFFFDAF8A.toInt()
-    const val SECONDARY_FIXED = 0xFFFFDBCC.toInt()
-    const val DARK = 0xFF313030.toInt()
-    const val ERROR = 0xFFBA1A1A.toInt()
-}
-
 internal object ScannerTransportPolicy {
     fun canSendToBackend(isSocketConnected: Boolean, hasSocket: Boolean): Boolean =
         isSocketConnected && hasSocket
@@ -170,6 +160,9 @@ internal object ScannerInputPolicy {
 }
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
+    private lateinit var homeScreen: View
+    private lateinit var homeNav: TextView
+    private lateinit var photoPreview: ImageView
     private lateinit var contentHost: FrameLayout
     private lateinit var scannerScreen: View
     private lateinit var historyScreen: View
@@ -212,8 +205,26 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var imageCapture: ImageCapture? = null
     private var webSocket: WebSocket? = null
     private var isSocketConnected = false
-    private var isScanning = false
-    private var isFrameInFlight = false
+    @Volatile private var isScanning = false
+    @Volatile private var scanGeneration = 0L
+    @Volatile private var liveMode = true
+    private var imageAnalysis: ImageAnalysis? = null
+    private var cameraProvider: ProcessCameraProvider? = null
+    private var lastAnalyzedAt = 0L
+    private var backendRetryAfter = 0L
+    private val scanSession = ScanSession()
+    private val offlineDetector by lazy { OfflineBrailleDetector(this) }
+    private val localTranslation by lazy { MlKitTranslationFallback() }
+    private var historyQuery = ""
+    private var historyWindow = "All"
+    private var lastAutoSpoken = ""
+    private var lastScanPayload: ScannerPayload? = null
+    private fun backendUrl(): String = getSharedPreferences("sciobraille", MODE_PRIVATE).getString("backendUrl", BuildConfig.SCIOBRAILLE_BACKEND_URL).orEmpty()
+    private fun onlineAllowed(): Boolean {
+        if (accessibilityPreferencesStore.load().scannerMode == ScannerPreference.OFFLINE_PREFERRED) return false
+        return (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).activeNetwork != null || backendUrl().contains("127.0.0.1")
+    }
+    @Volatile private var isFrameInFlight = false
     private var pendingFrames = 0
     private var pendingSinceMs = 0L
     private var lastSocketAttemptMs = 0L
@@ -222,7 +233,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var scannerResultState = ScannerResultState()
     private var translationRequestId = 0L
     private var lastHistoryText = ""
-    private var currentTab = AppTab.SCANNER
+    private var currentTab = AppTab.HOME
     private var scanPracticePending = false
     private var scanPracticeLessonId = "level-6-scan-own-page"
     private var currentStoryText = ""
@@ -246,12 +257,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private val entitlementManager by lazy { EntitlementManager(this) }
     private val learnerProfileStore by lazy { LearnerProfileStore(this) }
     private val accessibilityPreferencesStore by lazy { AccessibilityPreferencesStore(this) }
-    private val translationRepository by lazy {
-        TranslationRepository(httpClient, BuildConfig.SCIOBRAILLE_BACKEND_URL, MlKitTranslationFallback())
-    }
-    private val multilingualTtsManager by lazy {
-        MultilingualTtsManager { textToSpeech.takeIf { isTtsReady } }
-    }
+    private val translationRepository get() = TranslationRepository(httpClient, backendUrl(), localTranslation, ::onlineAllowed)
+    private val multilingualTtsManager by lazy { MultilingualTtsManager(this) { textToSpeech.takeIf { isTtsReady } } }
     private val storyTextRecognizer by lazy { StoryTextRecognizer() }
     private val milestoneManager by lazy { MilestoneManager(this, lmsRepository) }
     private val syncManager by lazy {
@@ -259,7 +266,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             this,
             lmsRepository,
             httpClient,
-            BuildConfig.SCIOBRAILLE_BACKEND_URL,
+            backendUrl(),
             lmsSyncUserId(),
             canCloudSync = { entitlementManager.canUseCloudSync() }
         )
@@ -327,20 +334,33 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        ScioColors.configure(accessibilityPreferencesStore.load(), resources.configuration)
+        setTheme(if (ScioColors.dark) R.style.AppTheme else R.style.AppThemeLight)
         super.onCreate(savedInstanceState)
         textToSpeech = TextToSpeech(this, this)
         loadHistory()
-        setContentView(buildUi())
-
-        if (hasCameraPermission()) {
-            startCamera()
-        } else {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.CAMERA),
-                CAMERA_PERMISSION_REQUEST
-            )
+        val root = buildUi()
+        setContentView(root)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom); insets
         }
+        root.viewTreeObserver.addOnGlobalLayoutListener { applyAccessibleSizing(root) }
+        if (savedInstanceState != null) {
+            lastOutput = savedInstanceState.getString("recognized").orEmpty()
+            scannerResultState = ScannerResultState(rawText = savedInstanceState.getString("raw").orEmpty(), recognizedText = lastOutput,
+                translatedText = savedInstanceState.getString("translated").orEmpty(), selectedLanguage = AppLanguage.fromCode(savedInstanceState.getString("target")),
+                translatedLanguage = savedInstanceState.getString("translatedLanguage")?.let { AppLanguage.fromCode(it) })
+            outputText.text = lastOutput.ifBlank { "Point the camera at Braille and start scanning." }; renderTranslationState()
+            showTab(runCatching { AppTab.valueOf(savedInstanceState.getString("tab").orEmpty()) }.getOrDefault(AppTab.HOME))
+        }
+        if (!getSharedPreferences("sciobraille", MODE_PRIVATE).getBoolean("onboarded", false)) showOnboarding()
+    }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("recognized", scannerResultState.recognizedText); outState.putString("raw", scannerResultState.rawText)
+        outState.putString("translated", scannerResultState.translatedText); outState.putString("target", scannerResultState.selectedLanguage.languageCode)
+        outState.putString("translatedLanguage", scannerResultState.translatedLanguage?.languageCode); outState.putString("tab", currentTab.name)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onInit(status: Int) {
@@ -350,6 +370,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             accessibilityPreferencesStore.load().let {
                 multilingualTtsManager.speechRate = it.speechRate
                 multilingualTtsManager.pitch = it.speechPitch
+                multilingualTtsManager.preferredVoice = it.voiceName
+                multilingualTtsManager.offlineOnly = it.scannerMode == ScannerPreference.OFFLINE_PREFERRED
             }
         }
     }
@@ -362,10 +384,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         root.addView(buildHeader())
 
         contentHost = FrameLayout(this)
+        homeScreen = buildHomeScreen()
         scannerScreen = buildScannerScreen()
         historyScreen = buildHistoryScreen()
         learnScreen = buildLearnScreen()
         aboutScreen = buildAboutScreen()
+        contentHost.addView(homeScreen)
         contentHost.addView(scannerScreen)
         contentHost.addView(historyScreen)
         contentHost.addView(learnScreen)
@@ -373,7 +397,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         root.addView(contentHost, LinearLayout.LayoutParams(-1, 0, 1f))
 
         root.addView(buildBottomNav())
-        showTab(AppTab.SCANNER)
+        showTab(AppTab.HOME)
         return root
     }
 
@@ -392,7 +416,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         header.addView(TextView(this).apply {
             text = BuildConfig.APP_TITLE_LABEL
             setTextColor(ScioColors.PRIMARY_CONTAINER)
-            textSize = 32f
+            textSize = 25f
             typeface = Typeface.DEFAULT_BOLD
             includeFontPadding = false
             setPadding(dp(12), 0, 0, 0)
@@ -406,10 +430,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             isClickable = true
             isFocusable = true
             setOnClickListener {
-                showTab(AppTab.LEARN)
-                showLearnerProfileDialog()
+                showSettings()
             }
-        }, LinearLayout.LayoutParams(dp(74), dp(44)))
+        }, LinearLayout.LayoutParams(dp(80), dp(52)))
         return header
     }
 
@@ -430,7 +453,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
         chips.addView(chip("Language: English"), LinearLayout.LayoutParams(0, dp(52), 1f))
         chips.addView(SpaceView(this), LinearLayout.LayoutParams(dp(16), 1))
-        chips.addView(chip("Grade 1"), LinearLayout.LayoutParams(0, dp(52), 1f))
+        chips.addView(chip("Letters a–z"), LinearLayout.LayoutParams(0, dp(52), 1f))
         body.addView(chips)
 
         body.addView(actionButton("Photo", false) { showPhotoScanOptions() }.apply {
@@ -448,9 +471,10 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             setPadding(dp(1), dp(1), dp(1), dp(1))
         }
         previewView = PreviewView(this).apply {
-            scaleType = PreviewView.ScaleType.FILL_CENTER
+            scaleType = PreviewView.ScaleType.FIT_CENTER
             setBackgroundColor(Color.BLACK)
         }
+        photoPreview = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER; visibility = View.GONE }
         detectionOverlay = DetectionOverlayView(this)
         frameOverlay = ScanFrameOverlayView(this)
         progress = ProgressBar(this).apply {
@@ -458,6 +482,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             visibility = View.GONE
         }
         previewFrame.addView(previewView, FrameLayout.LayoutParams(-1, -1))
+        previewFrame.addView(photoPreview, FrameLayout.LayoutParams(-1, -1))
         previewFrame.addView(detectionOverlay, FrameLayout.LayoutParams(-1, -1))
         previewFrame.addView(frameOverlay, FrameLayout.LayoutParams(-1, -1))
         previewFrame.addView(progress, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER))
@@ -466,7 +491,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         })
 
         statsText = TextView(this).apply {
-            text = "Backend required / Ready"
+            text = "On-device and online recognition / Ready"
             setTextColor(ScioColors.MUTED)
             textSize = 14f
             typeface = Typeface.MONOSPACE
@@ -506,7 +531,20 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         })
         controls.addView(languageButton, LinearLayout.LayoutParams(dp(64), dp(64)))
         body.addView(controls)
-
+        body.addView(TextView(this).apply { text = "Camera zoom"; setTextColor(ScioColors.TEXT) })
+        body.addView(SeekBar(this).apply {
+            max = 100; contentDescription = "Camera zoom"
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) { if (fromUser) camera?.cameraControl?.setLinearZoom(value / 100f) }
+                override fun onStartTrackingTouch(bar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(bar: SeekBar?) = Unit
+            })
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        body.addView(actionButton("Restart scan", false) {
+            stopScanning("Restarted"); scanSession.reset(); lastOutput = ""; lastAutoSpoken = ""; lastHistoryText = ""
+            translationRequestId++; scannerResultState = ScannerResultState(selectedLanguage = defaultTranslationLanguage())
+            outputText.text = "Ready for a new page"; renderTranslationState(); startScanning()
+        })
         val resultCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = rounded(ScioColors.SECONDARY_CONTAINER, ScioColors.SECONDARY, 1, 12)
@@ -545,6 +583,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         resultActions.addView(SpaceView(this), LinearLayout.LayoutParams(dp(12), 1))
         resultActions.addView(actionButton("Share", false) { shareOutput() }, LinearLayout.LayoutParams(0, dp(56), 1f))
         resultCard.addView(resultActions)
+        resultCard.addView(actionButton("Review and correct text", false) { editRecognizedText() })
+        val audioControls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        audioControls.addView(actionButton("Pause", false) { multilingualTtsManager.pause() }, LinearLayout.LayoutParams(0,-2,1f))
+        audioControls.addView(actionButton("Resume", false) { handleSpeechStatus(multilingualTtsManager.resume(), scannerResultState.translatedLanguage ?: AppLanguage.ENGLISH) }, LinearLayout.LayoutParams(0,-2,1f))
+        audioControls.addView(actionButton("Stop", false) { multilingualTtsManager.stop() }, LinearLayout.LayoutParams(0,-2,1f))
+        resultCard.addView(audioControls)
 
         resultCard.addView(TextView(this).apply {
             text = "Translate & Speak"
@@ -583,6 +627,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         val translatedActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         translatedActions.addView(actionButton("Copy Translation", false) { copyText(scannerResultState.translatedText) }, LinearLayout.LayoutParams(0, dp(52), 1f))
         translatedActions.addView(actionButton("Share Translation", false) { shareText(scannerResultState.translatedText) }, LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginStart = dp(10) })
+        resultCard.addView(actionButton("Save result", false) {
+            if (lastOutput.isBlank()) toast("Scan a page first") else {
+                lastScanPayload?.let { addHistoryIfNew(it.copy(text = lastOutput, rawText = lastOutput)) }
+                saveTranslationToLatestHistory(); toast("Result saved to History")
+            }
+        })
         resultCard.addView(translatedActions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
         val preferences = accessibilityPreferencesStore.load()
@@ -631,7 +681,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    rebuildHistory(s?.toString().orEmpty())
+                    historyQuery = s?.toString().orEmpty(); rebuildHistory(historyQuery)
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
@@ -641,9 +691,21 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             bottomMargin = dp(18)
         })
         val filters = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        filters.addView(filterChip("All", true))
-        filters.addView(filterChip("Today", false))
-        filters.addView(filterChip("This Week", false))
+        listOf("All", "Today", "This Week").forEach { label ->
+            filters.addView(filterChip(label, label == historyWindow).apply {
+                isFocusable = true
+                setOnClickListener {
+                    historyWindow = label
+                    for (index in 0 until filters.childCount) {
+                        val chip = filters.getChildAt(index) as TextView
+                        chip.isSelected = chip.text == label
+                        chip.setTextColor(if (chip.isSelected) Color.WHITE else ScioColors.MUTED)
+                        chip.background = rounded(if (chip.isSelected) ScioColors.PRIMARY_CONTAINER else ScioColors.SURFACE, ScioColors.OUTLINE)
+                    }
+                    rebuildHistory(historyQuery)
+                }
+            })
+        }
         body.addView(filters)
         historyList = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -746,7 +808,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         val statRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         statRow.addView(statCard(historyEntries.size.toString(), "Scans"), LinearLayout.LayoutParams(0, dp(112), 1f))
         statRow.addView(SpaceView(this), LinearLayout.LayoutParams(dp(12), 1))
-        statRow.addView(statCard("11", "Languages"), LinearLayout.LayoutParams(0, dp(112), 1f))
+        statRow.addView(statCard(AppLanguage.entries.size.toString(), "Language choices"), LinearLayout.LayoutParams(0, dp(112), 1f))
         statRow.addView(SpaceView(this), LinearLayout.LayoutParams(dp(12), 1))
         statRow.addView(statCard("6", "LMS Levels"), LinearLayout.LayoutParams(0, dp(112), 1f))
         body.addView(statRow, LinearLayout.LayoutParams(-1, -2))
@@ -756,12 +818,20 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             "3  Read, copy, share, or listen to the English output."
         )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28) })
         body.addView(infoCard("Key features", listOf(
-            "V2 backend Braille scanner",
+            "English letter recognition: device and backend",
             "Braille Studio with visual and haptic playback",
             "Offline printed-page Story Reader",
             "Audio-first LMS, tactile practice, progress, and certificates",
             "Smart Assist voice commands and multilingual translation"
         )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
+        body.addView(infoCard("Supported Braille and scanning guidance", listOf(
+            "Camera recognition supports English letters a–z. Capitals, digits, punctuation and Grade 2 contractions are not validated.",
+            "Translation changes English output into another language; it does not recognize Tamil, Hindi or other Braille writing systems.",
+            "Keep the page flat, use even side lighting and hold steady. Review uncertain readings before use.",
+            "Try natural, mirrored or automatic orientation in Settings. Severe tilt and perspective can still fail.",
+            "Offline translation needs downloaded models. Speech needs a matching voice. Online processing sends images or text to the configured service."
+        )))
+        body.addView(actionButton("Accessibility and settings",true) { showSettings() })
         return scroll
     }
 
@@ -772,10 +842,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             setPadding(dp(14), dp(8), dp(14), dp(8))
             background = rounded(ScioColors.BACKGROUND, ScioColors.OUTLINE, 1, 0)
         }
+        homeNav = navItem("Home", "Home tab") { showTab(AppTab.HOME) }
         scannerNav = navItem("Scanner", "Scanner tab") { showTab(AppTab.SCANNER) }
         historyNav = navItem("History", "History tab") { showTab(AppTab.HISTORY) }
         learnNav = navItem("Learn", "Learn Braille tab") { showTab(AppTab.LEARN) }
-        aboutNav = navItem("About", "About BrailleEye tab") { showTab(AppTab.ABOUT) }
+        aboutNav = navItem("Help", "Help and supported Braille systems") { showTab(AppTab.ABOUT) }
+        nav.addView(homeNav, LinearLayout.LayoutParams(0, dp(64), 1f))
         nav.addView(scannerNav, LinearLayout.LayoutParams(0, dp(64), 1f))
         nav.addView(historyNav, LinearLayout.LayoutParams(0, dp(64), 1f))
         nav.addView(learnNav, LinearLayout.LayoutParams(0, dp(64), 1f))
@@ -786,17 +858,21 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun showTab(tab: AppTab) {
         stopBraillePlayback()
         currentTab = tab
+        homeScreen.visibility = if (tab == AppTab.HOME) View.VISIBLE else View.GONE
         scannerScreen.visibility = if (tab == AppTab.SCANNER) View.VISIBLE else View.GONE
         historyScreen.visibility = if (tab == AppTab.HISTORY) View.VISIBLE else View.GONE
         learnScreen.visibility = if (tab == AppTab.LEARN) View.VISIBLE else View.GONE
         aboutScreen.visibility = if (tab == AppTab.ABOUT) View.VISIBLE else View.GONE
         if (tab != AppTab.SCANNER && isScanning) stopScanning("Stopped")
+        if (tab != AppTab.SCANNER) { imageAnalysis?.clearAnalyzer(); cameraProvider?.unbindAll(); imageCapture = null; torchOn = false }
+        else if (hasCameraPermission()) startCamera()
         updateNav()
         if (tab == AppTab.HISTORY) rebuildHistory("")
         if (tab == AppTab.LEARN) loadLearnLessons()
     }
 
     private fun updateNav() {
+        updateNavItem(homeNav, currentTab == AppTab.HOME)
         updateNavItem(scannerNav, currentTab == AppTab.SCANNER)
         updateNavItem(historyNav, currentTab == AppTab.HISTORY)
         updateNavItem(learnNav, currentTab == AppTab.LEARN)
@@ -804,10 +880,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun updateNavItem(view: TextView, selected: Boolean) {
-        view.setTextColor(if (selected) ScioColors.TEXT else ScioColors.MUTED)
+        view.isSelected = selected
+        view.setTextColor(if (selected) Color.WHITE else ScioColors.MUTED)
         view.typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.MONOSPACE
         view.background = if (selected) {
-            rounded(if (view == historyNav || view == aboutNav) ScioColors.SECONDARY_CONTAINER else ScioColors.PRIMARY_CONTAINER, null, 0, 16)
+            rounded(ScioColors.PRIMARY_CONTAINER, null, 0, 16)
         } else {
             rounded(Color.TRANSPARENT, null, 0, 16)
         }
@@ -1553,7 +1630,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun apiUrl(path: String): String = BuildConfig.SCIOBRAILLE_BACKEND_URL.trimEnd('/') + path
+    private fun apiUrl(path: String): String = backendUrl().trimEnd('/') + path
 
     private fun startBraillePlayback(
         tokens: List<BrailleToken>,
@@ -2661,7 +2738,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         root.addView(actionButton("Voice Answer", false) {
             toast("Voice answer coming soon")
         }.apply {
-            contentDescription = "Voice answer placeholder. Speech recognition is not available yet."
+            text = "Voice answer unavailable"; isEnabled = false
+            contentDescription = "Use the answer buttons; voice answers are not implemented."
         }, LinearLayout.LayoutParams(-1, dp(52)).apply {
             topMargin = dp(4)
         })
@@ -3149,7 +3227,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         controls.addView(actionButton("Challenge", false) {
             toast("Challenge mode coming soon")
         }.apply {
-            contentDescription = "Challenge mode placeholder. Guided mode is available now."
+            text = "Challenge unavailable"; isEnabled = false
+            contentDescription = "Guided practice is available. Challenge mode is not implemented."
         }, LinearLayout.LayoutParams(0, dp(54), 1f))
 
         showCurrentCell()
@@ -4018,75 +4097,197 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             "${state.completedLessons} of ${state.totalLessons} lessons completed. $status. Button ${state.cta}."
     }
 
-    private fun startCamera() {
-        val providerFuture = ProcessCameraProvider.getInstance(this)
-        providerFuture.addListener(
-            {
-                runCatching {
-                    val provider = providerFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-                    imageCapture = ImageCapture.Builder()
-                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                        .setJpegQuality(75)
-                        .build()
-                    provider.unbindAll()
-                    camera = provider.bindToLifecycle(
-                        this,
-                        CameraSelector.DEFAULT_BACK_CAMERA,
-                        preview,
-                        imageCapture
-                    )
-                }.onSuccess {
-                    frameOverlay.setStatus("Ready", false)
-                }.onFailure {
-                    imageCapture = null
-                    camera = null
-                    frameOverlay.setStatus("Camera unavailable", false)
-                }
-            },
-            ContextCompat.getMainExecutor(this)
+    private fun buildHomeScreen(): View = ScrollView(this).apply {
+        val body = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24),dp(32),dp(24),dp(28)) }
+        addView(body)
+        body.addView(TextView(context).apply { text="READ. UNDERSTAND. CONNECT."; textSize=12f; letterSpacing=.1f; setTextColor(ScioColors.PRIMARY) })
+        body.addView(title("Your world,\nin words.").apply { setPadding(0,dp(16),0,dp(16)) })
+        body.addView(TextView(context).apply { text="Scan English Braille. Translate the words. Listen in your language."; textSize=19f; setTextColor(ScioColors.MUTED); setLineSpacing(0f,1.25f); setPadding(0,0,0,dp(24)) })
+        body.addView(actionButton("Start live scan",true) { showTab(AppTab.SCANNER); startScanning() },LinearLayout.LayoutParams(-1,dp(72)))
+        body.addView(actionButton("Translate a Braille photo",false) { showTab(AppTab.SCANNER); showPhotoScanOptions() },LinearLayout.LayoutParams(-1,dp(64)).apply { topMargin=dp(12) })
+        body.addView(infoCard("Make it yours",listOf("Download a translation language for offline reading. Choose a voice, text size and contrast in Settings.")),LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(28); bottomMargin=dp(16) })
+        body.addView(actionButton("Languages and offline models",false) { showScannerLanguagePicker() })
+        body.addView(actionButton("Learn Braille",false) { showTab(AppTab.LEARN) })
+        body.addView(actionButton("Saved translations",false) { showTab(AppTab.HISTORY) })
+        body.addView(TextView(context).apply { text="Recognition: English letters a–z. Translation and speech availability vary by language."; textSize=14f; setTextColor(ScioColors.MUTED); setPadding(0,dp(24),0,dp(8)) })
+    }
+    private fun showOnboarding() {
+        val pages=listOf(
+            "Welcome to SCIOBRAILLE" to "Read embossed English Braille with your camera. The current model recognizes letters a–z. Review uncertain readings.",
+            "Translate and listen" to "Select a target language. In Languages, long press a supported language to download its offline model. Speech uses matching voices installed on your phone.",
+            "Your data, your choice" to "History stays on this phone. Online recognition sends images to your configured backend. Online translation sends text to its provider. Offline only mode prevents those requests.",
+            "Designed around you" to "TalkBack, larger text, high contrast, dark mode and speech speed are available in Settings. Keep pages flat, hold steady and use even lighting."
         )
+        fun page(index:Int) {
+            AlertDialog.Builder(this).setTitle(pages[index].first).setMessage(pages[index].second).setCancelable(false)
+                .setPositiveButton(if(index==pages.lastIndex) "Get started" else "Next") { _,_ ->
+                    if(index==pages.lastIndex) getSharedPreferences("sciobraille",MODE_PRIVATE).edit().putBoolean("onboarded",true).apply() else page(index+1)
+                }.setNegativeButton("Skip") { _,_ -> getSharedPreferences("sciobraille",MODE_PRIVATE).edit().putBoolean("onboarded",true).apply() }.show()
+        }; page(0)
+    }
+    private fun showSettings() {
+        stopScanning("Paused for settings")
+        var preferences=accessibilityPreferencesStore.load()
+        val content=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(20),dp(8),dp(20),dp(16)) }
+        fun save(value:AccessibilityPreferences) { preferences=value; accessibilityPreferencesStore.save(value) }
+        fun choice(title:String,values:List<String>,selected:Int,update:(Int)->Unit) {
+            AlertDialog.Builder(this).setTitle(title).setSingleChoiceItems(values.toTypedArray(),selected) { dialog,index -> update(index); dialog.dismiss() }.setNegativeButton("Cancel",null).show()
+        }
+        content.addView(actionButton("Theme: ${preferences.theme.name.lowercase()}",false) {
+            choice("Theme",ThemePreference.entries.map { it.name.lowercase() },preferences.theme.ordinal) { save(preferences.copy(theme=ThemePreference.entries[it])); recreate() }
+        })
+        content.addView(actionButton("Text size: ${preferences.textSize.name.lowercase()}",false) {
+            choice("Text size",listOf("Standard","Large","Extra large"),preferences.textSize.ordinal) { save(preferences.copy(textSize=TextSizePreference.entries[it])); recreate() }
+        })
+        content.addView(CheckBox(this).apply { text="High contrast"; isChecked=preferences.highContrast; minHeight=dp(48)
+            setOnCheckedChangeListener { _,checked -> save(preferences.copy(highContrast=checked)); recreate() } })
+        content.addView(CheckBox(this).apply { text="Reduced motion"; isChecked=preferences.reducedMotion; minHeight=dp(48)
+            setOnCheckedChangeListener { _,checked -> save(preferences.copy(reducedMotion=checked)) } })
+        val modeButton=actionButton("Recognition: ${modeLabel(preferences.scannerMode)}",false) {}
+        modeButton.setOnClickListener {
+            choice("Processing mode",listOf("Auto: device first, backend if needed","Online preferred, device fallback","Offline only: no server requests"),preferences.scannerMode.ordinal) {
+                save(preferences.copy(scannerMode=ScannerPreference.entries[it])); modeButton.text="Recognition: ${modeLabel(preferences.scannerMode)}"
+                multilingualTtsManager.offlineOnly=preferences.scannerMode==ScannerPreference.OFFLINE_PREFERRED
+            }
+        }; content.addView(modeButton)
+        content.addView(actionButton("Page orientation",false) {
+            choice("Braille orientation",listOf("Automatic: compare both sides","Natural raised side","Mirrored reverse side"),if(preferences.autoOrientation) 0 else if(preferences.mirrorInput) 2 else 1) {
+                save(preferences.copy(autoOrientation=it==0,mirrorInput=it==2))
+            }
+        })
+        content.addView(TextView(this).apply { text="Speech speed"; setTextColor(ScioColors.TEXT) })
+        content.addView(SeekBar(this).apply {
+            max=100; progress=((preferences.speechRate-.5f)*100).roundToInt(); contentDescription="Speech speed, half speed to one and a half speed"
+            setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar:SeekBar?,progress:Int,fromUser:Boolean) { if(fromUser) { save(preferences.copy(speechRate=.5f+progress/100f)); multilingualTtsManager.speechRate=preferences.speechRate } }
+                override fun onStartTrackingTouch(bar:SeekBar?)=Unit
+                override fun onStopTrackingTouch(bar:SeekBar?)=Unit
+            })
+        },LinearLayout.LayoutParams(-1,dp(52)))
+        content.addView(actionButton("Choose speech voice",false) {
+            val voices=textToSpeech?.voices.orEmpty().sortedBy { "${it.locale.displayLanguage} ${it.name}" }
+            if(voices.isEmpty()) toast("No speech voices installed") else {
+                val names=listOf("Automatic: match translated language")+voices.map { "${it.locale.displayName} · ${it.name} · ${if(it.isNetworkConnectionRequired) "online" else "offline"}" }
+                choice("Speech voice",names,voices.indexOfFirst { it.name==preferences.voiceName }+1) {
+                    val voice=if(it==0) "" else voices[it-1].name
+                    save(preferences.copy(voiceName=voice)); multilingualTtsManager.preferredVoice=voice
+                }
+            }
+        })
+        content.addView(actionButton("Languages and downloads",false) { showScannerLanguagePicker() })
+        content.addView(actionButton("Backend address",false) {
+            val field=EditText(this).apply { setText(backendUrl()); hint="https://your-server.example"; inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI }
+            val dialog=AlertDialog.Builder(this).setTitle("Recognition and translation backend").setMessage("Online scans send images here. Release builds require HTTPS. Do not enter API keys.").setView(field).setPositiveButton("Save",null).setNegativeButton("Cancel",null).create()
+            dialog.setOnShowListener { dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener saveClick@{
+                val value=field.text.toString().trim().trimEnd('/')
+                val uri=runCatching { java.net.URI(value) }.getOrNull()
+                if(uri?.host.isNullOrBlank() || uri?.userInfo!=null || uri?.query!=null || uri?.fragment!=null || (uri?.scheme!="https" && !(BuildConfig.DEBUG && uri?.scheme=="http"))) {
+                    field.error="Enter a valid HTTPS server address"; return@saveClick
+                }
+                getSharedPreferences("sciobraille",MODE_PRIVATE).edit().putString("backendUrl",value).apply()
+                backendRetryAfter=0; dialog.dismiss(); toast("Backend saved")
+            } }; dialog.show()
+        })
+        content.addView(actionButton("Learner profile",false) { showLearnerProfileDialog() })
+        content.addView(actionButton("Clear saved scans",false) {
+            AlertDialog.Builder(this).setTitle("Delete all saved scans?").setMessage("This removes source text and translations from this phone.")
+                .setPositiveButton("Delete") { _,_ -> historyEntries.clear(); lastHistoryText=""; saveHistory(); rebuildHistory(""); toast("History deleted") }.setNegativeButton("Cancel",null).show()
+        })
+        content.addView(TextView(this).apply { text="History and lessons stay on this phone. Online recognition sends images to your backend; translation sends text to its provider. Offline models and voices need an initial download. Speech pauses when you leave the app. Translation uses your configured provider or Google ML Kit."; textSize=14f; setTextColor(ScioColors.MUTED); setPadding(0,dp(16),0,dp(8)) })
+        AlertDialog.Builder(this).setTitle("Settings and accessibility").setView(ScrollView(this).apply { addView(content) }).setPositiveButton("Done",null).show()
+        applyAccessibleSizing(content)
+    }
+    private fun modeLabel(mode:ScannerPreference)=when(mode) {
+        ScannerPreference.AUTO->"Auto"
+        ScannerPreference.ONLINE_PREFERRED->"Online preferred"
+        ScannerPreference.OFFLINE_PREFERRED->"Offline only"
+    }
+    private fun applyAccessibleSizing(view:View) {
+        val scale=accessibilityPreferencesStore.load().textSize.scale
+        if(view is TextView && view.getTag(R.id.base_text_size)==null) {
+            view.setTag(R.id.base_text_size,view.textSize)
+            view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,view.textSize*scale)
+            if(view.isClickable || view is Button || view is EditText) view.minimumHeight=dp(48)
+            if(scale>1f && view.layoutParams?.height?.let { it>0 }==true) view.layoutParams=view.layoutParams.apply { height=maxOf(dp(48),(height*scale).roundToInt()) }
+        }
+        if(view is android.view.ViewGroup) for(index in 0 until view.childCount) applyAccessibleSizing(view.getChildAt(index))
+    }
+    private fun editRecognizedText() {
+        if(scannerResultState.recognizedText.isBlank()) { toast("Scan or select a photo first"); return }
+        stopScanning("Paused for review")
+        val field=EditText(this).apply { setText(scannerResultState.recognizedText); minLines=4; contentDescription="Correct recognized English text" }
+        AlertDialog.Builder(this).setTitle("Review recognized text").setView(field).setPositiveButton("Use corrected text") { _,_ ->
+            val edited=field.text.toString().trim()
+            if(edited.isNotBlank()) {
+                translationRequestId++; scannerResultState=scannerResultState.withRecognizedResult(scannerResultState.rawText,edited,edited)
+                lastOutput=edited; outputText.text=edited; renderTranslationState()
+                lastScanPayload?.let { addHistoryIfNew(it.copy(text=edited,rawText=edited,correctedText=edited)) }
+            }
+        }.setNegativeButton("Cancel",null).show()
     }
 
+    private fun startCamera() {
+        if(currentTab!=AppTab.SCANNER || !hasCameraPermission()) return
+        val future=ProcessCameraProvider.getInstance(this)
+        future.addListener({
+            if(isDestroyed || currentTab!=AppTab.SCANNER) return@addListener
+            runCatching {
+                val provider=future.get(); cameraProvider=provider
+                val preview=Preview.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3).build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                imageCapture=ImageCapture.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).setJpegQuality(85).build()
+                imageAnalysis=ImageAnalysis.Builder().setTargetResolution(Size(1280,960)).setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build().also { analysis ->
+                    analysis.setAnalyzer(networkExecutor) { image ->
+                        val generation=scanGeneration
+                        if(!isScanning || !liveMode || isFrameInFlight || android.os.SystemClock.elapsedRealtime()-lastAnalyzedAt<750) { image.close(); return@setAnalyzer }
+                        isFrameInFlight=true; lastAnalyzedAt=android.os.SystemClock.elapsedRealtime()
+                        var file:File?=null
+                        try {
+                            val bitmap=image.toBitmap()
+                            val rotated=if(image.imageInfo.rotationDegrees==0) bitmap else Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,Matrix().apply { postRotate(image.imageInfo.rotationDegrees.toFloat()) },true)
+                            file=File.createTempFile("live-frame",".jpg",cacheDir)
+                            file.outputStream().use { rotated.compress(Bitmap.CompressFormat.JPEG,85,it) }
+                            if(rotated!==bitmap) rotated.recycle(); bitmap.recycle()
+                            val payload=recognizeFrame(file)
+                            runOnUiThread { if(isScanning && generation==scanGeneration) completeScan(payload) }
+                        } catch(_:Exception) {
+                            runOnUiThread { if(isScanning && generation==scanGeneration) finishScanError("Recognition failed. Check the page, model and backend settings, then retry.") }
+                        } finally { image.close(); file?.delete(); if(generation==scanGeneration) isFrameInFlight=false }
+                    }
+                }
+                provider.unbindAll()
+                camera=provider.bindToLifecycle(this,CameraSelector.DEFAULT_BACK_CAMERA,preview,imageCapture,imageAnalysis)
+                frameOverlay.setStatus("Ready",false)
+            }.onFailure { imageCapture=null; camera=null; frameOverlay.setStatus("Camera unavailable. You can still translate a photo.",false) }
+        },ContextCompat.getMainExecutor(this))
+    }
     private fun startScanning() {
-        if (!hasCameraPermission()) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.CAMERA),
-                CAMERA_PERMISSION_REQUEST
-            )
-            return
-        }
-        if (imageCapture == null) {
-            frameOverlay.setStatus("Camera is not ready", false)
-            startCamera()
-            return
-        }
-        isScanning = true
-        pendingFrames = 0
-        pendingSinceMs = 0L
-        scanButton.text = "Scanning"
-        scanButton.isEnabled = false
-        progress.visibility = View.VISIBLE
-        statsText.text = "0 cells / 0% confidence / Scanning"
-        frameOverlay.setStatus("Scanning Braille...", true)
-        captureAndScan()
+        if(!hasCameraPermission()) { ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.CAMERA),CAMERA_PERMISSION_REQUEST); return }
+        if(imageCapture==null) { startCamera(); toast("Camera is starting. Tap Start when ready."); return }
+        scanGeneration++; liveMode=true; isScanning=true; isFrameInFlight=false; scanSession.reset(); lastAnalyzedAt=0
+        photoPreview.visibility=View.GONE; photoPreview.setImageDrawable(null)
+        scanButton.text="Pause"; scanButton.isEnabled=true; progress.visibility=View.VISIBLE
+        statsText.text="Hold the page steady · English letters a–z"; frameOverlay.setStatus("Scanning",true)
     }
-
-    private fun stopScanning(message: String) {
-        isScanning = false
-        isFrameInFlight = false
-        pendingFrames = 0
-        webSocket?.close(1000, "Stopped")
-        webSocket = null
-        isSocketConnected = false
-        progress.visibility = View.GONE
-        scanButton.text = "Scan"
-        scanButton.isEnabled = true
-        statsText.text = "Scanner stopped"
-        frameOverlay.setStatus(message, false)
+    private fun stopScanning(message:String) {
+        scanGeneration++; isScanning=false; isFrameInFlight=false; pendingFrames=0
+        webSocket?.cancel(); webSocket=null; isSocketConnected=false
+        if(::progress.isInitialized) progress.visibility=View.GONE
+        if(::scanButton.isInitialized) { scanButton.text="Start"; scanButton.isEnabled=true }
+        if(::statsText.isInitialized) statsText.text=message
+        if(::frameOverlay.isInitialized) frameOverlay.setStatus(message,false)
+    }
+    private fun recognizeFrame(file:File):ScannerPayload {
+        val preferences=accessibilityPreferencesStore.load()
+        fun local()=offlineDetector.detect(file,if(preferences.autoOrientation) null else preferences.mirrorInput)
+        if(preferences.scannerMode==ScannerPreference.OFFLINE_PREFERRED || !onlineAllowed()) return local()
+        if(preferences.scannerMode==ScannerPreference.AUTO) {
+            val result=runCatching { local() }.getOrNull()
+            if(result!=null && result.ok && result.detections>0 && result.confidence>=.55) return result
+            if(System.currentTimeMillis()>=backendRetryAfter) runCatching { scanUploadedImageOnline(file) }.onSuccess { return it }.onFailure { backendRetryAfter=System.currentTimeMillis()+30_000 }
+            return result ?: error("No recognition engine available")
+        }
+        if(System.currentTimeMillis()>=backendRetryAfter) runCatching { scanUploadedImageOnline(file) }.onSuccess { return it }.onFailure { backendRetryAfter=System.currentTimeMillis()+30_000 }
+        return local()
     }
 
     private fun openScanSocket() {
@@ -4177,188 +4378,88 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             }
     }
 
-    private fun scanSelectedBrailleImage(uri: Uri) {
-        val frameFile = File.createTempFile("sciobraille-upload", ".img", cacheDir)
-        runCatching {
-            contentResolver.openInputStream(uri)?.use { input ->
-                frameFile.outputStream().use { output -> input.copyTo(output) }
-            } ?: error("Could not open selected image")
-            if (frameFile.length() <= 0L) error("Selected image is empty")
-        }.onSuccess {
-            scanBrailleImageFile(frameFile)
-        }.onFailure {
-            frameFile.delete()
-            toast("Could not open that image")
+    private fun scanSelectedBrailleImage(uri:Uri) {
+        stopScanning("Opening photo")
+        lifecycleScope.launch {
+            val file=withContext(Dispatchers.IO) {
+                val destination=File.createTempFile("sciobraille-upload",".img",cacheDir)
+                try {
+                    contentResolver.openInputStream(uri)?.use { input -> destination.outputStream().use { output ->
+                        val buffer=ByteArray(16*1024); var total=0L
+                        while(true) { val count=input.read(buffer); if(count<0) break; total+=count; require(total<=BrailleImageLoader.MAX_BYTES); output.write(buffer,0,count) }
+                    } } ?: error("Cannot open image")
+                    destination
+                } catch(_:Exception) { destination.delete(); null }
+            }
+            if(file==null) toast("Could not open image. Use a JPEG or PNG smaller than 20 MB.") else scanBrailleImageFile(file)
         }
     }
-
-    private fun scanBrailleImageFile(frameFile: File) {
-        if (isScanning) stopScanning("Stopped")
-        isScanning = true
-        isFrameInFlight = true
-        scanButton.text = "Scanning"
-        scanButton.isEnabled = false
-        progress.visibility = View.VISIBLE
-        statsText.text = "Preparing photo / Flipping / Scanning"
-        frameOverlay.setStatus("Flipping and scanning photo...", true)
-        outputText.text = "Scanning selected Braille image..."
-
+    private fun scanBrailleImageFile(file:File) {
+        stopScanning("Preparing photo")
+        val generation=scanGeneration
+        liveMode=false; isScanning=true; isFrameInFlight=true; scanSession.reset()
+        scanButton.text="Cancel"; scanButton.isEnabled=true; progress.visibility=View.VISIBLE; statsText.text="Recognizing photo…"
         networkExecutor.execute {
+            var normalized:File?=null
             try {
-                val payload = scanUploadedImageOnline(frameFile)
-                runOnUiThread {
-                    if (isScanning) completeScan(payload)
-                }
-            } catch (_: Exception) {
-                runOnUiThread {
-                    if (isScanning) finishScanError(backendUnavailableMessage())
-                }
-            } finally {
-                frameFile.delete()
-                runOnUiThread { isFrameInFlight = false }
-            }
+                val bitmap=BrailleImageLoader.load(file)
+                normalized=File.createTempFile("normalized",".jpg",cacheDir)
+                normalized.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG,90,it) }
+                runOnUiThread { if(generation==scanGeneration) { photoPreview.setImageBitmap(bitmap); photoPreview.visibility=View.VISIBLE } else bitmap.recycle() }
+                val payload=recognizeFrame(normalized)
+                runOnUiThread { if(isScanning && generation==scanGeneration) completeScan(payload) }
+            } catch(_:Exception) {
+                runOnUiThread { if(isScanning && generation==scanGeneration) finishScanError("Could not recognize photo. Use a clear JPEG or PNG below 20 MB and 32 megapixels.") }
+            } finally { file.delete(); normalized?.delete(); if(generation==scanGeneration) isFrameInFlight=false }
         }
     }
-
-    private fun scanUploadedImageOnline(frameFile: File): ScannerPayload {
-        val imageBytes = frameFile.readBytes()
-        val body = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart(
-                "frame",
-                "braille-image.jpg",
-                imageBytes.toRequestBody("image/jpeg".toMediaType())
-            )
-            .build()
-        val request = Request.Builder()
-            .url(apiUrl(ScannerInputPolicy.uploadPath()))
-            .post(body)
-            .build()
+    private fun scanUploadedImageOnline(file:File):ScannerPayload {
+        val preferences=accessibilityPreferencesStore.load()
+        val query=if(preferences.autoOrientation) "" else "?flip_horizontal=${preferences.mirrorInput}"
+        val body=MultipartBody.Builder().setType(MultipartBody.FORM).addFormDataPart("frame","frame.jpg",file.readBytes().toRequestBody("image/jpeg".toMediaType())).build()
+        val request=Request.Builder().url(apiUrl("/api/scan-frame$query")).post(body).build()
         return httpClient.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string().orEmpty()
-            if (!response.isSuccessful) error("Backend rejected image: ${response.code}")
-            ScannerPayload.fromJsonOrNull(responseBody) ?: error("Invalid scanner response")
+            if(!response.isSuccessful) error("Recognition server unavailable")
+            ScannerPayload.fromJsonOrNull(response.body?.string().orEmpty()) ?: error("Invalid scanner response")
         }
     }
-
-    private fun captureAndScan() {
-        val capture = imageCapture ?: return
-        if (isFrameInFlight) return
-        isFrameInFlight = true
-        progress.visibility = View.VISIBLE
-
-        val frameFile = File.createTempFile("sciobraille-frame", ".jpg", cacheDir)
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(frameFile).build()
-        capture.takePicture(
-            outputOptions,
-            ContextCompat.getMainExecutor(this),
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    networkExecutor.execute {
-                        try {
-                            val payload = scanUploadedImageOnline(frameFile)
-                            runOnUiThread {
-                                if (isScanning) {
-                                    completeScan(payload)
-                                }
-                            }
-                        } catch (_: Exception) {
-                            runOnUiThread {
-                                if (isScanning) finishScanError(backendUnavailableMessage())
-                            }
-                        } finally {
-                            frameFile.delete()
-                            runOnUiThread {
-                                isFrameInFlight = false
-                                progress.visibility = if (isScanning) View.VISIBLE else View.GONE
-                            }
-                        }
-                    }
-                }
-
-                override fun onError(exception: ImageCaptureException) {
-                    frameFile.delete()
-                    isFrameInFlight = false
-                    if (isScanning) finishScanError("Camera capture failed. Tap Scan to try again.")
-                }
+    private fun completeScan(payload:ScannerPayload) {
+        if(!isScanning || !payload.ok) return
+        val text=payload.rawText.ifBlank { payload.text }.trim()
+        val reading=scanSession.accept(text,oneShot=!liveMode)
+        val result=payload.copy(text=text,rawText=text,stable=reading.stable)
+        lastScanPayload=result; renderPayload(result)
+        if(reading.isNew) {
+            addHistoryIfNew(result)
+            val preferences=accessibilityPreferencesStore.load()
+            if(lastAutoSpoken!=text) { lastAutoSpoken=text
+                if(preferences.autoSpeakTranslation) translateScannerResult(true) else if(preferences.autoSpeakScan) speakScannerOriginal()
             }
-        )
-    }
-
-    private fun completeScan(payload: ScannerPayload) {
-        if (!isScanning) return
-        val finalText = payload.rawText.ifBlank { payload.text }.trim()
-        val finalPayload = payload.copy(
-            text = finalText,
-            rawText = finalText,
-            stable = true
-        )
-        isScanning = false
-        isFrameInFlight = false
-        pendingFrames = 0
-        pendingSinceMs = 0L
-        webSocket?.close(1000, "Scan complete")
-        webSocket = null
-        isSocketConnected = false
-        progress.visibility = View.GONE
-        scanButton.text = "Scan"
-        scanButton.isEnabled = true
-
-        renderPayload(finalPayload)
-        if (currentTab == AppTab.SCANNER) {
-            val confidencePercent = (finalPayload.confidence * 100).roundToInt()
-            statsText.text = "${finalPayload.detections} cells / $confidencePercent% / Backend model"
-            frameOverlay.setStatus(
-                if (finalText.isBlank()) "No Braille found. Tap Scan to try again." else "Result ready",
-                false
-            )
         }
+        val uncertain=if(payload.confidence<.55 && text.isNotBlank()) " · Uncertain: review text" else ""
+        statsText.text="${payload.detections} cells · ${(payload.confidence*100).roundToInt()}% · ${payload.sourceMode}$uncertain"
+        progress.visibility=View.GONE
+        if(!liveMode) { isScanning=false; scanButton.text="Start"; scanButton.isEnabled=true; frameOverlay.setStatus(if(text.isBlank()) "No Braille found" else "Photo result · review before use",false) }
+        else frameOverlay.setStatus(if(text.isBlank()) "Point at Braille" else if(reading.stable) "Stable reading" else "Hold steady",true)
     }
-
-    private fun finishScanError(message: String) {
-        isScanning = false
-        isFrameInFlight = false
-        pendingFrames = 0
-        pendingSinceMs = 0L
-        webSocket?.cancel()
-        webSocket = null
-        isSocketConnected = false
-        progress.visibility = View.GONE
-        scanButton.text = "Scan"
-        scanButton.isEnabled = true
-        statsText.text = "Scan failed"
-        frameOverlay.setStatus(message, false)
-    }
-
-    private fun backendUnavailableMessage(): String =
-        "Backend unavailable. Keep the laptop backend running and reconnect USB with CONNECT_PHONE_USB.bat."
+    private fun finishScanError(message:String) { stopScanning(message); statsText.text=message; statsText.announceForAccessibility(message) }
+    private fun backendUnavailableMessage()="Recognition server unavailable. Check Settings or use Offline only."
 
     private fun renderPayload(payload: ScannerPayload) {
         if (!payload.ok) {
             frameOverlay.setStatus("Backend error", false)
             return
         }
-        detectionOverlay.update(payload.boxes)
+        detectionOverlay.setImageSize(payload.imageWidth, payload.imageHeight)
+        detectionOverlay.update(if (accessibilityPreferencesStore.load().showDetectionBoxes) payload.boxes else emptyList())
         val confidencePercent = (payload.confidence * 100).roundToInt()
         statsText.text = "${payload.detections} cells / $confidencePercent% confidence / ${if (payload.stable) "Stable" else "Scanning"}"
         if (payload.text.isNotBlank()) {
             val recognized = payload.rawText.ifBlank { payload.text }.trim()
-            lastOutput = recognized
-            scannerResultState = scannerResultState.withRecognizedResult(
-                raw = payload.rawText,
-                recognized = recognized,
-                corrected = payload.correctedText
-            )
-            outputText.text = lastOutput
-            braillePreviewText.text = toBraillePreview(lastOutput)
-            renderTranslationState()
-            if (payload.stable) addHistoryIfNew(payload)
-            if (payload.stable) {
-                val preferences = accessibilityPreferencesStore.load()
-                when {
-                    preferences.autoSpeakTranslation -> translateScannerResult(speakAfter = true)
-                    preferences.autoSpeakScan -> speakScannerOriginal()
-                }
+            if (recognized != scannerResultState.recognizedText) {
+                translationRequestId++; lastOutput = recognized
+                scannerResultState = scannerResultState.withRecognizedResult(payload.rawText, recognized, payload.correctedText)
+                outputText.text = lastOutput; braillePreviewText.text = toBraillePreview(lastOutput); renderTranslationState()
             }
             if (scanPracticePending && payload.stable) {
                 scanPracticePending = false
@@ -4366,6 +4467,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 return
             }
         } else {
+            translationRequestId++; lastOutput = ""; scannerResultState = scannerResultState.withRecognizedResult("", "", ""); renderTranslationState()
             outputText.text = "Hold steady. No Braille detected yet."
             braillePreviewText.text = ""
         }
@@ -4397,12 +4499,16 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun rebuildHistory(query: String) {
         if (!::historyList.isInitialized) return
         historyList.removeAllViews()
-        val filtered = historyEntries.filter {
-            query.isBlank() || it.text.contains(query, ignoreCase = true)
+        val now = java.time.ZonedDateTime.now()
+        val cutoff = when (historyWindow) {
+            "Today" -> now.toLocalDate().atStartOfDay(now.zone).toInstant().toEpochMilli()
+            "This Week" -> now.toLocalDate().minusDays(6).atStartOfDay(now.zone).toInstant().toEpochMilli()
+            else -> 0L
         }
+        val filtered = historyEntries.filter { it.createdAt >= cutoff && (query.isBlank() || it.text.contains(query,true) || it.translatedText.contains(query,true)) }
         if (filtered.isEmpty()) {
             historyList.addView(TextView(this).apply {
-                text = "No scans yet. Use Scanner to create your first transcript."
+                text = if (historyEntries.isEmpty()) "No scans yet. Start a scan to save your first reading." else "No results match this search or date filter."
                 setTextColor(ScioColors.MUTED)
                 textSize = 16f
                 gravity = Gravity.CENTER
@@ -4438,28 +4544,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             .apply()
     }
 
-    private fun defaultTranslationLanguage(): AppLanguage {
-        val profileLanguage = learnerProfileStore.load().languageCode
-        val preferred = accessibilityPreferencesStore.load().preferredTranslationLanguage
-        return AppLanguage.fromCode(profileLanguage.takeUnless { it.equals("en", true) } ?: preferred)
-    }
-
+    private fun defaultTranslationLanguage(): AppLanguage = AppLanguage.fromCode(accessibilityPreferencesStore.load().preferredTranslationLanguage)
     private fun showScannerLanguagePicker() {
-        val languages = AppLanguage.entries.toTypedArray()
-        val selected = languages.indexOf(scannerResultState.selectedLanguage).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle("Translate recognized text")
-            .setSingleChoiceItems(languages.map { it.displayName }.toTypedArray(), selected) { dialog, index ->
-                val language = languages[index]
-                scannerResultState = scannerResultState.selectLanguage(language)
-                accessibilityPreferencesStore.save(
-                    accessibilityPreferencesStore.load().copy(preferredTranslationLanguage = language.languageCode)
-                )
-                renderTranslationState()
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        LanguagePicker(this, lifecycleScope, translationRepository, localTranslation) { language ->
+            translationRequestId++; scannerResultState = scannerResultState.selectLanguage(language)
+            accessibilityPreferencesStore.save(accessibilityPreferencesStore.load().copy(preferredTranslationLanguage = language.languageCode))
+            renderTranslationState()
+            if (scannerResultState.recognizedText.isNotBlank()) translateScannerResult(false)
+        }.show()
     }
 
     private fun translateScannerResult(speakAfter: Boolean) {
@@ -4481,7 +4573,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         renderTranslationState()
         lifecycleScope.launch {
             val result = translationRepository.translate(source, AppLanguage.ENGLISH, requestLanguage)
-            if (requestId != translationRequestId) return@launch
+            if (requestId != translationRequestId || source != scannerResultState.recognizedText.trim() || requestLanguage != scannerResultState.selectedLanguage) return@launch
             scannerResultState = when (result) {
                 is TranslationResult.Success -> scannerResultState.copy(
                     translatedText = result.translatedText,
@@ -4491,7 +4583,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 )
                 TranslationResult.OfflineUnavailable -> scannerResultState.copy(
                     translationStatus = TranslationStatus.OFFLINE_UNAVAILABLE,
-                    translationMessage = "Translation unavailable offline. Original Braille result is still available."
+                    translationMessage = "No installed translation model. Open Languages and long press a supported language to download its model while online."
                 )
                 TranslationResult.UnsupportedLanguage -> scannerResultState.copy(
                     translationStatus = TranslationStatus.UNSUPPORTED,
@@ -4499,7 +4591,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 )
                 is TranslationResult.Failure -> scannerResultState.copy(
                     translationStatus = TranslationStatus.FAILED,
-                    translationMessage = "Translation unavailable. Original Braille result is still available."
+                    translationMessage = result.message
                 )
             }
             renderTranslationState()
@@ -4516,6 +4608,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         translationLanguageButton.contentDescription =
             "Selected language ${scannerResultState.selectedLanguage.displayName}. Double tap to change."
         translatedOutputText.text = scannerResultState.translatedText
+        translatedOutputText.textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+        translatedOutputText.textLocale = Locale.forLanguageTag((scannerResultState.translatedLanguage ?: scannerResultState.selectedLanguage).localeTag)
         translatedOutputText.contentDescription = if (scannerResultState.translatedText.isBlank()) {
             "No translation available"
         } else {
@@ -4561,10 +4655,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun saveTranslationToLatestHistory() {
         val index = historyEntries.indexOfFirst { it.text == scannerResultState.recognizedText }
         if (index < 0) return
-        historyEntries[index] = historyEntries[index].copy(
-            translatedText = scannerResultState.translatedText,
-            translatedLanguageCode = scannerResultState.translatedLanguage?.languageCode.orEmpty()
-        )
+        val entry = historyEntries[index]
+        val updated = entry.copy(translatedText = scannerResultState.translatedText, translatedLanguageCode = scannerResultState.translatedLanguage?.languageCode.orEmpty())
+        if (entry.translatedText.isNotBlank() && entry.translatedLanguageCode != updated.translatedLanguageCode) {
+            historyEntries.add(0, updated.copy(createdAt = System.currentTimeMillis()))
+            while (historyEntries.size > 50) historyEntries.removeAt(historyEntries.lastIndex)
+        } else historyEntries[index] = updated
         saveHistory()
     }
 
@@ -4642,7 +4738,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         stopScanning("Stopped")
         stopBraillePlayback()
-        networkExecutor.shutdownNow()
+        imageAnalysis?.clearAnalyzer(); cameraProvider?.unbindAll()
+        networkExecutor.execute { offlineDetector.closeIfOpened() }; networkExecutor.shutdown()
         lmsAudioManager.stop()
         multilingualTtsManager.stop()
         lmsHapticManager.stop()
@@ -4659,6 +4756,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     override fun onStop() {
         if (isScanning) stopScanning("Stopped")
         pauseBraillePlayback()
+        multilingualTtsManager.pause()
         if (torchOn) {
             camera?.cameraControl?.enableTorch(false)
             torchOn = false
@@ -4691,7 +4789,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         typeface = Typeface.MONOSPACE
         setTextColor(if (selected) Color.WHITE else ScioColors.MUTED)
         background = rounded(if (selected) ScioColors.PRIMARY_CONTAINER else ScioColors.BACKGROUND, ScioColors.OUTLINE, 1, 14)
-        layoutParams = LinearLayout.LayoutParams(-2, dp(42)).apply {
+        layoutParams = LinearLayout.LayoutParams(-2, dp(48)).apply {
             rightMargin = dp(12)
         }
         setPadding(dp(18), 0, dp(18), 0)
@@ -4713,7 +4811,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         minHeight = dp(48)
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(if (filled) Color.WHITE else ScioColors.SECONDARY)
-        background = rounded(if (filled) ScioColors.SECONDARY else Color.TRANSPARENT, ScioColors.SECONDARY, 2, 6)
+        background = rounded(if (filled) ScioColors.PRIMARY_CONTAINER else Color.TRANSPARENT, ScioColors.SECONDARY, 2, 6)
         setOnClickListener { onClick() }
     }
 
@@ -4776,6 +4874,19 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             orientation = LinearLayout.VERTICAL
             background = rounded(ScioColors.SURFACE, ScioColors.OUTLINE, 1, 10)
             setPadding(dp(20), dp(18), dp(20), dp(18))
+            addView(actionButton("Open and translate", false) {
+                stopScanning("History result"); translationRequestId++
+                scannerResultState = ScannerResultState(rawText=entry.rawText, recognizedText=entry.text, correctedText=entry.correctedText,
+                    translatedText=entry.translatedText, selectedLanguage=if(entry.translatedLanguageCode.isBlank()) defaultTranslationLanguage() else AppLanguage.fromCode(entry.translatedLanguageCode),
+                    translatedLanguage=entry.translatedLanguageCode.takeIf { it.isNotBlank() }?.let { AppLanguage.fromCode(it) })
+                lastOutput=entry.text; outputText.text=entry.text; braillePreviewText.text=entry.braille
+                lastScanPayload=ScannerPayload(true,entry.text,false,entry.detections,entry.confidence,emptyList(),rawText=entry.rawText,correctedText=entry.correctedText,sourceMode=entry.mode)
+                showTab(AppTab.SCANNER); renderTranslationState()
+            })
+            addView(actionButton("Delete saved result",false) {
+                AlertDialog.Builder(this@MainActivity).setTitle("Delete this saved result?")
+                    .setPositiveButton("Delete") { _,_ -> historyEntries.remove(entry); lastHistoryText=""; saveHistory(); rebuildHistory(historyQuery) }.setNegativeButton("Cancel",null).show()
+            })
             addView(TextView(context).apply {
                 text = entry.braille.ifBlank { toBraillePreview(entry.text) }
                 textSize = 20f
@@ -4816,7 +4927,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 addView(actionButton("Copy", false) { copyText(entry.text) }, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
                     marginStart = dp(8)
                 })
-                addView(actionButton("Share", false) { shareText(entry.text) }, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                addView(actionButton("Share", false) { shareText(if(entry.translatedText.isBlank()) entry.text else "${entry.text}\n\n${entry.translatedText}") }, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
                     marginStart = dp(8)
                 })
             })
@@ -4839,6 +4950,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 }
 
 enum class AppTab {
+    HOME,
     SCANNER,
     HISTORY,
     LEARN,
@@ -4935,6 +5047,8 @@ data class ScannerPayload(
     val boxes: List<DetectionBox>,
     val rawText: String = text,
     val correctedText: String = text,
+    val imageWidth: Int = 3,
+    val imageHeight: Int = 4,
     val sourceMode: String = "offline",
     val inputFlippedHorizontal: Boolean = ScannerInputPolicy.FORCE_HORIZONTAL_FLIP
 ) {
@@ -4943,6 +5057,7 @@ data class ScannerPayload(
 
         fun fromJson(raw: String): ScannerPayload {
             val json = JSONObject(raw)
+            require(json.has("ok") && json.optBoolean("ok", false) && json.has("text")) { "Invalid recognition response" }
             return ScannerPayload(
                 ok = json.optBoolean("ok", true),
                 text = json.optString("text", ""),
@@ -4952,6 +5067,7 @@ data class ScannerPayload(
                 boxes = DetectionBox.fromJsonArray(json.optJSONArray("boxes")),
                 rawText = json.optString("raw_text", json.optString("text", "")),
                 correctedText = json.optString("corrected_text", json.optString("text", "")),
+                imageWidth = json.optInt("image_width", 3), imageHeight = json.optInt("image_height", 4),
                 sourceMode = "backend",
                 inputFlippedHorizontal = json.optBoolean("input_flipped_horizontal", ScannerInputPolicy.FORCE_HORIZONTAL_FLIP)
             )
@@ -5057,6 +5173,10 @@ private data class LetterboxedBitmap(
 )
 
 class DetectionOverlayView(context: Context) : View(context) {
+    private var imageWidth = 3
+    private var imageHeight = 4
+    fun setImageSize(width: Int, height: Int) { imageWidth = width.coerceAtLeast(1); imageHeight = height.coerceAtLeast(1) }
+
     private var boxes: List<DetectionBox> = emptyList()
     private val primaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = ScioColors.PRIMARY_CONTAINER
@@ -5086,7 +5206,10 @@ class DetectionOverlayView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         boxes.forEachIndexed { index, box ->
-            val rect = RectF(box.x1 * width, box.y1 * height, box.x2 * width, box.y2 * height)
+            val scale = min(width.toFloat() / imageWidth, height.toFloat() / imageHeight)
+            val drawWidth = imageWidth * scale; val drawHeight = imageHeight * scale
+            val left = (width - drawWidth) / 2f; val top = (height - drawHeight) / 2f
+            val rect = RectF(left + box.x1 * drawWidth, top + box.y1 * drawHeight, left + box.x2 * drawWidth, top + box.y2 * drawHeight)
             val paint = if (index % 2 == 0) primaryPaint else secondaryPaint
             canvas.drawRoundRect(rect, 8f, 8f, paint)
             if (box.label.isNotBlank()) {
@@ -5223,31 +5346,18 @@ class OfflineBrailleDetector(private val context: Context) {
             }
         }
 
-    fun detect(frameFile: File): ScannerPayload {
-        val bitmap = BitmapFactory.decodeFile(frameFile.absolutePath)
-            ?: return ScannerPayload(false, "", false, 0, 0.0, emptyList())
-        // Match the production backend: the captured frame is mirrored before inference.
-        // inferCandidate maps boxes back to the natural camera-preview coordinates.
-        val selected = inferCandidate(
-            bitmap,
-            mirroredInput = ScannerInputPolicy.FORCE_HORIZONTAL_FLIP
-        )
-        bitmap.recycle()
-        android.util.Log.d(
-            "SciobrailleOffline",
-            "Model: ${BuildConfig.OFFLINE_MODEL_ASSET}, Forced mirror: ${selected.mirrored}, Kept: ${selected.modelBoxes.size}"
-        )
-        val (stableText, stable) = stabilize(selected.rawText)
-        return ScannerPayload(
-            ok = true,
-            text = stableText,
-            stable = stable,
-            detections = selected.modelBoxes.size,
-            confidence = selected.confidence,
-            boxes = selected.displayBoxes,
-            rawText = selected.rawText,
-            correctedText = selected.rawText
-        )
+    fun detect(frameFile: File, mirror: Boolean? = null): ScannerPayload {
+        val bitmap = BrailleImageLoader.load(frameFile)
+        val width = bitmap.width; val height = bitmap.height
+        val selected = try {
+            if (mirror != null) inferCandidate(bitmap, mirror)
+            else listOf(inferCandidate(bitmap, false), inferCandidate(bitmap, true)).maxWith(
+                compareBy<OfflineCandidate> { BrailleOrientationSelector.score(it.rawText) }.thenBy { it.modelBoxes.size }.thenBy { it.confidence })
+        } finally { bitmap.recycle() }
+        return ScannerPayload(ok = true, text = selected.rawText, stable = false, detections = selected.modelBoxes.size,
+            confidence = selected.confidence, boxes = selected.displayBoxes, rawText = selected.rawText,
+            correctedText = selected.rawText, sourceMode = "offline", inputFlippedHorizontal = selected.mirrored,
+            imageWidth = width, imageHeight = height)
     }
 
     private fun inferCandidate(bitmap: Bitmap, mirroredInput: Boolean): OfflineCandidate {
@@ -5273,12 +5383,13 @@ class OfflineBrailleDetector(private val context: Context) {
         interpreter.run(input, outputBuffer)
         val output = dequantizeOutput(outputBuffer)
         val shape = outputTensor.shape()
+        require(shape.size == 3 && shape[1] == 30 && shape[2] > 0) { "Unsupported output tensor" }
         val channels = shape[1]
         val anchors = shape[2]
         val boxes = parseDetections(output, channels, anchors)
             .mapNotNull { unletterbox(it, letterboxed.geometry) }
         val rawCount = boxes.size
-        val nmsBoxes = nonMaxSuppress(boxes).take(80)
+        val nmsBoxes = nonMaxSuppress(boxes).take(300)
         android.util.Log.d(
             "SciobrailleOffline",
             "Model: ${BuildConfig.OFFLINE_MODEL_ASSET}, Mirror: $mirroredInput, Parsed: $rawCount, Kept: ${nmsBoxes.size}"
@@ -5352,6 +5463,7 @@ class OfflineBrailleDetector(private val context: Context) {
 
     private fun buildInput(bitmap: Bitmap): ByteBuffer {
         val inputTensor = interpreter.getInputTensor(0)
+        require(inputTensor.shape().contentEquals(intArrayOf(1, FALLBACK_IMAGE_SIZE, FALLBACK_IMAGE_SIZE, 3))) { "Unsupported input tensor" }
         val buffer = ByteBuffer.allocateDirect(inputTensor.numBytes()).order(ByteOrder.nativeOrder())
         val quant = inputTensor.quantizationParams()
         val pixels = IntArray(FALLBACK_IMAGE_SIZE * FALLBACK_IMAGE_SIZE)
@@ -5435,7 +5547,7 @@ class OfflineBrailleDetector(private val context: Context) {
         val selected = mutableListOf<DetectionBox>()
         val threshold = BuildConfig.DUPLICATE_IOU_THRESHOLD.toDouble()
         for (box in boxes.sortedByDescending { it.confidence }) {
-            if (selected.none { iou(it, box) >= threshold }) selected.add(box)
+            if (selected.none { iou(it, box) >= if (it.label == box.label) 0.45 else threshold }) selected.add(box)
         }
         return selected
     }

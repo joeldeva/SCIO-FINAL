@@ -24,5 +24,8 @@ data class ScannerResultState(
         translationMessage = ""
     )
 
-    fun selectLanguage(language: AppLanguage): ScannerResultState = copy(selectedLanguage = language)
+    fun selectLanguage(language: AppLanguage): ScannerResultState = if (language == selectedLanguage) this else copy(
+        selectedLanguage = language, translatedText = "", translatedLanguage = null,
+        translationStatus = TranslationStatus.IDLE, translationMessage = ""
+    )
 }
