@@ -219,6 +219,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var historyWindow = "All"
     private var lastAutoSpoken = ""
     private var pendingLiveStart = false
+    private var cameraInitializing = false
+    private var pendingCertificateText = ""
+    private val certificateExport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if(uri!=null) {
+            val text=pendingCertificateText
+            lifecycleScope.launch {
+                val saved=withContext(Dispatchers.IO) { runCatching { contentResolver.openOutputStream(uri)?.use { CertificatePdf.write(text,it) } ?: error("Cannot open file") }.isSuccess }
+                toast(if(saved) "Certificate PDF saved" else "Could not save certificate")
+            }
+        }
+    }
     private var lastScanPayload: ScannerPayload? = null
     private fun backendUrl(): String = getSharedPreferences("sciobraille", MODE_PRIVATE).getString("backendUrl", BuildConfig.SCIOBRAILLE_BACKEND_URL).orEmpty()
     private fun onlineAllowed(): Boolean {
@@ -348,6 +359,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
         root.viewTreeObserver.addOnGlobalLayoutListener { applyAccessibleSizing(root) }
         if (savedInstanceState != null) {
+            pendingCertificateText=savedInstanceState.getString("certificateText").orEmpty()
             lastOutput = savedInstanceState.getString("recognized").orEmpty()
             scannerResultState = ScannerResultState(rawText = savedInstanceState.getString("raw").orEmpty(), recognizedText = lastOutput,
                 translatedText = savedInstanceState.getString("translated").orEmpty(), selectedLanguage = AppLanguage.fromCode(savedInstanceState.getString("target")),
@@ -358,6 +370,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         if (!getSharedPreferences("sciobraille", MODE_PRIVATE).getBoolean("onboarded", false)) showOnboarding()
     }
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("certificateText",pendingCertificateText)
         outState.putString("recognized", scannerResultState.recognizedText); outState.putString("raw", scannerResultState.rawText)
         outState.putString("translated", scannerResultState.translatedText); outState.putString("target", scannerResultState.selectedLanguage.languageCode)
         outState.putString("translatedLanguage", scannerResultState.translatedLanguage?.languageCode); outState.putString("tab", currentTab.name)
@@ -1750,7 +1763,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 renderLmsProgress()
             }
         }.apply {
-            isEnabled = snapshot.syncOverview.status != SyncStatus.SYNCING
+            isEnabled = entitlementManager.canUseCloudSync() && snapshot.syncOverview.status != SyncStatus.SYNCING
+            if(!entitlementManager.canUseCloudSync()) text="Cloud sync unavailable"
             contentDescription = "Sync now. $syncText"
         }, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(14) })
 
@@ -1896,7 +1910,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         SyncStatus.NOT_SYNCED -> if (entitlementManager.canUseCloudSync()) {
             "Not synced. Progress saved on this device. It will sync when internet is available."
         } else {
-            "Not synced. Cloud sync is available with Premium."
+            "Progress is saved on this device. Cloud sync requires secure accounts and is not enabled in this build."
         }
     }
 
@@ -1959,7 +1973,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         learnList.setPadding(0, 0, 0, 0)
         val learner = milestoneManager.learnerName()
         val date = formatSyncDateTime(award.awardedAt)
-        val certificateText = "BrailleEye LMS certificate. Presented to $learner for ${award.milestone.title}. Awarded $date."
+        val certificateText = "Presented to\n$learner\n\nFor ${award.milestone.title}\n\nAwarded $date\n\nEarned through SCIOBRAILLE learning exercises."
         learnList.addView(actionButton("Back to Milestones", false) { renderMilestoneList() }, LinearLayout.LayoutParams(-1, dp(54)).apply {
             bottomMargin = dp(16)
         })
@@ -1969,7 +1983,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             setPadding(dp(22), dp(28), dp(22), dp(28))
             contentDescription = certificateText
             addView(TextView(context).apply {
-                text = "BRAILLEEYE LMS"
+                text = "SCIOBRAILLE LEARNING"
                 textSize = 17f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
@@ -2019,58 +2033,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             }, "Share certificate"))
         }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
         learnList.addView(actionButton("Download certificate", false) {
-            toast("PDF download will be available when certificate PDF generation is added.")
+            pendingCertificateText=certificateText
+            certificateExport.launch("SCIOBRAILLE-certificate.pdf")
         }, LinearLayout.LayoutParams(-1, dp(54)))
     }
 
     private fun renderUpgradeScreen(feature: String) {
-        learnTitleText.visibility = View.GONE
-        learnSubtitleText.visibility = View.GONE
-        learnStatusText.visibility = View.VISIBLE
-        learnStatusText.text = "Premium learning"
-        learnList.removeAllViews()
-        learnList.setPadding(0, 0, 0, 0)
-        learnList.addView(actionButton("Back to Learn Home", false) { loadLearnLessons() }, LinearLayout.LayoutParams(-1, dp(54)).apply {
-            bottomMargin = dp(16)
-        })
-        learnList.addView(TextView(this).apply {
-            text = "Unlock full Braille learning"
-            textSize = 28f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(ScioColors.TEXT)
-            setPadding(0, dp(4), 0, dp(12))
-        })
-        learnList.addView(TextView(this).apply {
-            text = "$feature is part of Premium."
-            textSize = 16f
-            setTextColor(ScioColors.MUTED)
-            setPadding(0, 0, 0, dp(14))
-        })
-        learnList.addView(infoCard("Premium includes", listOf(
-            "Complete A-Z Braille lessons",
-            "Practice real Braille with scanner-based learning",
-            "Track progress and accuracy",
-            "Learn Grade 2 contractions",
-            "Sync progress across devices"
-        )), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
-        learnList.addView(actionButton("Upgrade", true) {
-            toast("Payments are not configured yet.")
-        }, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(10) })
-        learnList.addView(actionButton("Use school code", false) {
-            val input = EditText(this).apply {
-                hint = "School code"
-                contentDescription = "School code"
-            }
-            AlertDialog.Builder(this)
-                .setTitle("Use school code")
-                .setView(input)
-                .setPositiveButton("Submit") { _, _ ->
-                    entitlementManager.savePendingSchoolCode(input.text.toString())
-                    toast("School code saved for verification. Access changes after school verification.")
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }, LinearLayout.LayoutParams(-1, dp(54)))
+        AlertDialog.Builder(this).setTitle(feature).setMessage("All bundled lessons are available locally. Complete the earlier learning steps to unlock the next level. Cloud school accounts and payments are not enabled.")
+            .setPositiveButton("Learn home") { _,_ -> loadLearnLessons() }.setNegativeButton("Close",null).show()
     }
 
     private fun selectedLearningLanguage(): Language {
@@ -2260,7 +2230,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 if (state.unlocked) {
                     renderLevelPlaceholder(state)
                 } else {
-                    renderUpgradeScreen(state.title)
+                    AlertDialog.Builder(this@MainActivity).setTitle("Keep learning").setMessage(state.lockedReason).setPositiveButton("OK",null).show()
                 }
             }.apply {
                 isEnabled = true
@@ -4228,9 +4198,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun startCamera() {
-        if(currentTab!=AppTab.SCANNER || !hasCameraPermission()) return
+        if(currentTab!=AppTab.SCANNER || !hasCameraPermission() || cameraInitializing) return
+        cameraInitializing=true
         val future=ProcessCameraProvider.getInstance(this)
         future.addListener({
+            cameraInitializing=false
             if(isDestroyed || currentTab!=AppTab.SCANNER) return@addListener
             runCatching {
                 val provider=future.get(); cameraProvider=provider

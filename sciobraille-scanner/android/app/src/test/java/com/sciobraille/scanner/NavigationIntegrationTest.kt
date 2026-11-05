@@ -46,4 +46,9 @@ class NavigationIntegrationTest {
   root.viewTreeObserver.dispatchOnGlobalLayout();assertTrue(ScioColors.dark);assertTrue(ScioColors.contrast);screenshot(root,"home-dark-large")
   controller.recreate().visible();assertEquals(TextSizePreference.EXTRA_LARGE,AccessibilityPreferencesStore(controller.get()).load().textSize);controller.pause().stop().destroy()
  }
+ @Test fun certificateExportsARealUnicodePdf() {
+  val output=java.io.ByteArrayOutputStream();CertificatePdf.write("Presented to\nதமிழ் learner\n\nFor learning Braille",output)
+  assertTrue(output.size()>1000);assertEquals("%PDF",String(output.toByteArray().take(4).toByteArray()))
+ }
+
 }
