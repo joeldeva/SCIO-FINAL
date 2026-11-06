@@ -3,7 +3,22 @@
 The project supports Play upload signing without storing passwords or keystores
 in source control.
 
-## Upload key ownership
+## Development installation identity
+
+From 1.2.1-dev, debug builds use `com.sciobraille.scanner.dev` and the launcher label
+`SCIOBRAILLE Dev`. Release builds retain `com.sciobraille.scanner`; the existing
+V2 experiment retains `.v2test`. FileProvider authorities follow the application
+ID. The debug app can coexist with the original app without replacing its data.
+Its local data is separate and is not automatically migrated from the original.
+
+Updating an installed **Dev** build still requires the same debug signing key.
+CI uses temporary debug keys unless a stable signing setup is supplied; a new
+package ID fixes the conflict with the original app, not key continuity between
+different development build machines. Production updates require the original
+production signing identity. Do not uninstall the original app merely to try
+this separate development build.
+
+## Upload key ownership and availability
 
 The development APK from GitHub Actions uses a temporary debug key. No production
 upload keystore or passwords were provided to this development environment, and

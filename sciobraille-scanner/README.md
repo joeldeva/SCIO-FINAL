@@ -1,6 +1,8 @@
 # SCIOBRAILLE
 
-Native Android assistive Braille scanning, translation and speech, built on the existing Kotlin/CameraX, LiteRT and FastAPI/YOLO application. Development version **1.2.0-dev**. This branch is an integrated development build, **not a production certification**.
+Native Android assistive Braille scanning, translation and speech, built on the existing Kotlin/CameraX, LiteRT and FastAPI/YOLO application. Development version **1.2.1-dev**. This branch is an integrated development build, **not a production certification**.
+
+Development APKs now install as **SCIOBRAILLE Dev** (`com.sciobraille.scanner.dev`) alongside the original SCIOBRAILLE (`com.sciobraille.scanner`). The new app starts with separate history, preferences and learning progress; it does not replace or erase the original app's data. This fixes the package/signing conflict encountered with the 1.2.0 development APK. Release identity stays unchanged.
 
 Verified development build: [run 42161440217](https://github.com/joeldeva/SCIO-FINAL/actions/runs/42161440217), source commit `a33eb672c16ef20e5bffd0669e032191da2c6968`. **49 JVM, 3 Android emulator and 41 backend tests passed**; APK signature verified; lint reports 0 errors and 261 warnings. The workflow's Android artifact contains the APK and reports (retained for 30 days). [Checksums, actual model/translation results and limits](docs/VERIFICATION.md).
 

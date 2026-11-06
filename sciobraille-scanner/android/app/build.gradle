@@ -36,8 +36,8 @@ android {
         applicationId 'com.sciobraille.scanner'
         minSdk 26
         targetSdk 36
-        versionCode 14
-        versionName '1.2.0-dev'
+        versionCode 15
+        versionName '1.2.1-dev'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredBackendUrl}\""
         buildConfigField 'String', 'OFFLINE_MODEL_ASSET', '"best_int8.tflite"'
@@ -62,13 +62,15 @@ android {
 
     buildTypes {
         debug {
+            // Keep CI/development signing separate from an installed production app.
+            applicationIdSuffix '.dev'
             buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredDebugBackendUrl}\""
             buildConfigField 'String', 'OFFLINE_MODEL_ASSET', '"best_int8.tflite"'
             buildConfigField 'String', 'APP_TITLE_LABEL', '"SCIOBRAILLE"'
             buildConfigField 'float', 'DUPLICATE_IOU_THRESHOLD', '0.70f'
             manifestPlaceholders = [
                 usesCleartextTraffic: 'true',
-                appLabel: 'SCIOBRAILLE'
+                appLabel: 'SCIOBRAILLE Dev'
             ]
         }
         v2Test {
