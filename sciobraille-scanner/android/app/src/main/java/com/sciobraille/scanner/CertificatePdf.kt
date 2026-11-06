@@ -15,7 +15,8 @@ object CertificatePdf {
         val body=StaticLayout.Builder.obtain(text,0,text.length,TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color=Color.rgb(23,32,57);textSize=19f
         },499).setAlignment(Layout.Alignment.ALIGN_NORMAL).setLineSpacing(8f,1f).build()
-        PdfDocument().use { document ->
+        val document=PdfDocument()
+        try {
             var top=0;var number=1
             while(top<body.height) {
                 val page=document.startPage(PdfDocument.PageInfo.Builder(595,842,number++).create())
@@ -32,6 +33,6 @@ object CertificatePdf {
                 document.finishPage(page);top=end
             }
             document.writeTo(output)
-        }
+        } finally { document.close() }
     }
 }
