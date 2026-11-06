@@ -1,0 +1,28 @@
+{
+  "build_commit": "a33eb672c16ef20e5bffd0669e032191da2c6968",
+  "workflow_run": 42161440217,
+  "android_jvm": {
+    "passed": 49,
+    "failed": 0,
+    "skipped": 0
+  },
+  "android_emulator_api34": {
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "backend": {
+    "passed": 41,
+    "warnings": 1
+  },
+  "lint": {
+    "errors": 0,
+    "warnings": 261
+  },
+  "apk": {
+    "bytes": 142894243,
+    "sha256": "c31ae3cf5ea39bf8d6d6e9114348a3969c652832ecbc69b53313bf95d8b0e998",
+    "signing": "debug"
+  },
+  "scope": "Development verification, not production certification. See VERIFICATION.md."
+}

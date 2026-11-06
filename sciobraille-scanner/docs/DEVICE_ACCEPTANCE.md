@@ -2,6 +2,19 @@
 
 These are procedures to run on real Android devices, not passed tests. Record device, Android version, TTS engine/voices, model checksum and build commit. Test at least a small API 26 phone, a current mid-range phone, a tablet and an API 36 phone. Include TalkBack users in acceptance.
 
+The CI emulator checks are separate from this physical-device checklist: native PDF generation/rendering, real bundled-model inference on a repository photograph, and a live Tamil model download followed by local translation with backend access disabled. A download outage is recorded and skipped, never passed; translation assertions still fail for an invalid response after successful download. The final recorded run passed all three without skips.
+
+To reproduce with an API 34 emulator or attached test device after fetching Git LFS assets:
+
+```sh
+mkdir -p sciobraille-scanner/android/app/src/androidTest/assets
+cp sciobraille-model-lab/benchmark/images/test_sciobraille.jpeg sciobraille-scanner/android/app/src/androidTest/assets/
+cd sciobraille-scanner/android
+./gradlew -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true :app:connectedDebugAndroidTest
+```
+
+The photograph is test-only and is not bundled as application content. See [VERIFICATION.md](VERIFICATION.md) for executed results.
+
 1. Fresh install: onboarding/skip, Home actions, permission grant/denial/permanent denial, Settings. A missing camera must leave photo translation available.
 2. Camera: raised/reverse-side physical pages, multiline text and word gaps; portrait/landscape, flash absence, zoom, pause/resume/restart, screen off, navigation away, incoming calls. Ensure one inference at a time and no late result after pausing.
 3. Import: camera capture/gallery, EXIF rotation, corrupt/oversized/HEIC input, empty page, large page, repeated photo and cancel. Correct reading manually; save/reopen must retain raw output and corrected text separately.

@@ -1,0 +1,7 @@
+{
+  "status": "local_response_received",
+  "source": "Welcome. Learning Braille connects us.",
+  "translated": "வரவேற்கிறோம். கற்றல் நம்மை இணைக்கும்.",
+  "target": "ta",
+  "scope": "Actual downloaded ML Kit model; app backend disabled. Not a human quality assessment or packet-capture test."
+}

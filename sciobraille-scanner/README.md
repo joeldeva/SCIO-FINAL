@@ -2,6 +2,8 @@
 
 Native Android assistive Braille scanning, translation and speech, built on the existing Kotlin/CameraX, LiteRT and FastAPI/YOLO application. Development version **1.2.0-dev**. This branch is an integrated development build, **not a production certification**.
 
+Verified development build: [run 42161440217](https://github.com/joeldeva/SCIO-FINAL/actions/runs/42161440217), source commit `a33eb672c16ef20e5bffd0669e032191da2c6968`. **49 JVM, 3 Android emulator and 41 backend tests passed**; APK signature verified; lint reports 0 errors and 261 warnings. The workflow's Android artifact contains the APK and reports (retained for 30 days). [Checksums, actual model/translation results and limits](docs/VERIFICATION.md).
+
 The camera model recognizes **English letters a–z**. Translating its English output into Tamil, Hindi or another language does not enable recognition of that language's Braille writing system. Capitals, numbers, punctuation signs, contracted Grade 2 and Bharati camera recognition are not validated or advertised as supported.
 
 ## Use the app
@@ -86,8 +88,8 @@ Real model weights, YOLO inference/preprocessing, CameraX, the TFLite detector, 
 
 ## Verification and remaining work
 
-[Audit](docs/REPOSITORY_AUDIT_2026-11-05.md) · [Architecture](docs/ARCHITECTURE.md) · [Verification report](docs/VERIFICATION.md) · [Device acceptance procedure](docs/DEVICE_ACCEPTANCE.md)
+[Audit](docs/REPOSITORY_AUDIT_2026-11-05.md) · [Architecture](docs/ARCHITECTURE.md) · [Capability status](docs/CAPABILITY_STATUS.md) · [Verification report](docs/VERIFICATION.md) · [Device acceptance procedure](docs/DEVICE_ACCEPTANCE.md)
 
-The three available labeled physical photographs are a small, non-independent regression set. They do not justify a high-accuracy production claim. No retraining or new quantization has been claimed. General perspective correction, arbitrary rotation, reliable punctuation/numbers/contractions and non-English Braille need suitable data/models and validation. Android hardware camera/latency/memory/battery, TalkBack usability, installed offline translation models, real device speech and release-signing validation remain explicit release gates.
+The three available labeled physical photographs are a small, non-independent regression set. They do not justify a high-accuracy production claim. No retraining or new quantization has been claimed. General perspective correction, arbitrary rotation, reliable punctuation/numbers/contractions and non-English Braille need suitable data/models and validation. Native offline inference, PDF export and an actual downloaded Tamil translation model passed emulator checks. Physical Android camera/latency/memory/battery, TalkBack usability, language/model quality beyond that smoke test, real device speech and release-signing validation remain explicit release gates.
 
 UI copy and lessons remain primarily English; Unicode translation output and speech can use other languages. Older project reports describe historical builds and are superseded by this README and the linked verification report.
