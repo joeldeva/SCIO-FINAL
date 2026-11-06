@@ -234,6 +234,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun backendUrl(): String = getSharedPreferences("sciobraille", MODE_PRIVATE).getString("backendUrl", BuildConfig.SCIOBRAILLE_BACKEND_URL).orEmpty()
     private fun onlineAllowed(): Boolean {
         if (accessibilityPreferencesStore.load().scannerMode == ScannerPreference.OFFLINE_PREFERRED) return false
+        // A fresh install has no deployed server: keep inference local instead of
+        // waiting for DNS/network timeouts against the build-time placeholder.
+        if (backendUrl().contains("replace-with-your-sciobraille-backend.example.com")) return false
         return (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).activeNetwork != null || backendUrl().contains("127.0.0.1")
     }
     @Volatile private var isFrameInFlight = false
