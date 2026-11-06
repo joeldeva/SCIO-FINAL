@@ -52,10 +52,20 @@ jobs:
           target: google_apis
           disable-animations: true
           script: |
-            cd sciobraille-scanner/android && bash gradlew --no-daemon --max-workers=2 :app:connectedDebugAndroidTest
+            cd sciobraille-scanner/android && bash gradlew --no-daemon --max-workers=2 -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true :app:connectedDebugAndroidTest
             adb exec-out run-as com.sciobraille.scanner cat files/offline-device-smoke.json > sciobraille-scanner/android/app/build/reports/offline-device-smoke.json
             adb exec-out run-as com.sciobraille.scanner cat files/certificate-device-test.pdf > sciobraille-scanner/android/app/build/reports/certificate-device-test.pdf
             adb exec-out run-as com.sciobraille.scanner cat files/installed-translation-smoke.json > sciobraille-scanner/android/app/build/reports/installed-translation-smoke.json
+      - name: Validate collected native reports
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('sciobraille-scanner/android/app/build/reports')
+          json.loads((root/'offline-device-smoke.json').read_text())
+          json.loads((root/'installed-translation-smoke.json').read_text())
+          assert (root/'certificate-device-test.pdf').read_bytes().startswith(b'%PDF')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -64,6 +74,7 @@ jobs:
             sciobraille-scanner/android/app/build/outputs/apk/debug/*.apk
             sciobraille-scanner/android/app/build/reports/
             sciobraille-scanner/android/app/build/test-results/
+            sciobraille-scanner/android/app/build/outputs/androidTest-results/
           retention-days: 30
   backend:
     runs-on: ubuntu-24.04
