@@ -1,6 +1,6 @@
 {
-  "build_commit": "a33eb672c16ef20e5bffd0669e032191da2c6968",
-  "workflow_run": 42161440217,
+  "build_commit": "2ea2e666d1e577b49003e58da43135903430bb0b",
+  "workflow_run": 42203795652,
   "android_jvm": {
     "passed": 49,
     "failed": 0,
@@ -20,9 +20,18 @@
     "warnings": 261
   },
   "apk": {
-    "bytes": 142894243,
-    "sha256": "c31ae3cf5ea39bf8d6d6e9114348a3969c652832ecbc69b53313bf95d8b0e998",
-    "signing": "debug"
+    "bytes": 142894255,
+    "sha256": "0ef4c105114176c03a8e8acc5532f057c5ed609b86cf7912c38cb0f3e711f3f7",
+    "signing": "debug",
+    "application_id": "com.sciobraille.scanner.dev",
+    "launcher_label": "SCIOBRAILLE Dev",
+    "version_name": "1.2.1-dev",
+    "version_code": 15
   },
-  "scope": "Development verification, not production certification. See VERIFICATION.md."
+  "scope": "Development verification, not production certification. See VERIFICATION.md.",
+  "installation": {
+    "emulator_api34": "passed native tests using installed Dev package",
+    "physical_phone": "not observed",
+    "coexistence_with_original_apk": "not executed; package ID and FileProvider authority are separate"
+  }
 }
