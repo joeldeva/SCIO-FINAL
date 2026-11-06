@@ -1,0 +1,14 @@
+# Runtime only. Desktop demos/training keep their original requirements.txt.
+ultralytics>=8.3,<9
+opencv-python>=4.8,<6
+numpy>=1.26,<3
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+websockets>=13,<18
+python-multipart>=0.0.20,<1
+httpx>=0.28,<0.29
+Pillow>=11,<14
+# Legacy opt-in community translation; not the production default.
+deep-translator>=1.11,<2
+# Retained only for existing diagnostic correction tests; display uses raw text.
+pyspellchecker>=0.8,<1

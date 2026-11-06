@@ -130,7 +130,7 @@ class SyncManager(
 
     private fun unavailableResult(): SyncResult = SyncResult(
         SyncStatus.NOT_SYNCED,
-        "Progress saved on this device. It will sync when internet is available."
+        "Progress saved on this device. Cloud sync is disabled until secure accounts are configured."
     )
 
     private fun canAttemptSync(): Boolean = canCloudSync() && isBackendConfigured() && hasInternetConnection()

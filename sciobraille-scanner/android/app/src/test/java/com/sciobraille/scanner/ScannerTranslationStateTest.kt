@@ -7,7 +7,7 @@ import org.junit.Test
 
 class ScannerTranslationStateTest {
     @Test
-    fun selectingLanguagePreservesExistingTranslationAndSource() {
+    fun selectingLanguageClearsStaleTranslationAndPreservesSource() {
         val state = ScannerResultState(
             rawText = "raw",
             recognizedText = "hello",
@@ -20,9 +20,9 @@ class ScannerTranslationStateTest {
 
         assertEquals("raw", state.rawText)
         assertEquals("hello", state.recognizedText)
-        assertEquals("नमस्ते", state.translatedText)
+        assertEquals("", state.translatedText)
         assertEquals(AppLanguage.TAMIL, state.selectedLanguage)
-        assertEquals(AppLanguage.HINDI, state.translatedLanguage)
+        assertEquals(null, state.translatedLanguage)
     }
 
     @Test

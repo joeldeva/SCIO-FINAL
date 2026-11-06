@@ -1,0 +1,82 @@
+{
+  "scope": "In-process HTTP/WebSocket routes with real YOLO model. Optional community translations contact an unofficial service; not quality certification.",
+  "recognition": {
+    "http_status": 200,
+    "raw_text": "jaihfqd\nindia\nsciobraille\nvisually impaired\ngreaq project",
+    "detections": 51,
+    "websocket_agrees": true,
+    "second_frame_stable": true
+  },
+  "community_translation": [
+    {
+      "target": "ta",
+      "status": "failed",
+      "error": "Translation timed out. Please retry."
+    },
+    {
+      "target": "hi",
+      "status": "failed",
+      "error": "Translation unavailable. Original text is preserved."
+    },
+    {
+      "target": "te",
+      "status": "failed",
+      "error": "Translation timed out. Please retry."
+    },
+    {
+      "target": "ml",
+      "status": "failed",
+      "error": "Translation unavailable. Original text is preserved."
+    },
+    {
+      "target": "kn",
+      "status": "failed",
+      "error": "Translation unavailable. Original text is preserved."
+    },
+    {
+      "target": "bn",
+      "status": "failed",
+      "error": "Translation timed out. Please retry."
+    },
+    {
+      "target": "ar",
+      "status": "failed",
+      "error": "Translation unavailable. Original text is preserved."
+    },
+    {
+      "target": "zh-CN",
+      "status": "failed",
+      "error": "Translation timed out. Please retry."
+    },
+    {
+      "target": "zh-TW",
+      "status": "failed",
+      "error": "Translation unavailable. Original text is preserved."
+    },
+    {
+      "target": "ja",
+      "status": "failed",
+      "error": "Translation timed out. Please retry."
+    },
+    {
+      "target": "fr",
+      "status": "failed",
+      "error": "Translation unavailable. Original text is preserved."
+    },
+    {
+      "target": "sa",
+      "status": "failed",
+      "error": "Translation timed out. Please retry."
+    },
+    {
+      "target": "or",
+      "status": "failed",
+      "error": "Translation unavailable. Original text is preserved."
+    },
+    {
+      "target": "as",
+      "status": "failed",
+      "error": "Translation unavailable. Original text is preserved."
+    }
+  ]
+}

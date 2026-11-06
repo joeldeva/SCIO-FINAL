@@ -1,186 +1,97 @@
-# Sciobraille Scanner
+# SCIOBRAILLE
 
-## Multilingual scan speech
+Native Android assistive Braille scanning, translation and speech, built on the existing Kotlin/CameraX, LiteRT and FastAPI/YOLO application. Development version **1.2.1-dev**. This branch is an integrated development build, **not a production certification**.
 
-Scanner preserves raw, recognized, corrected, and translated text separately. Recognized English text first uses the existing FastAPI `/api/translate` endpoint, then Google ML Kit on-device translation if backend translation fails. Translated text uses an Android TTS voice matching the selected language. Supported targets are English, Hindi, Tamil, Telugu, Malayalam, Kannada, Spanish, French, German, Chinese, and Japanese. ML Kit downloads each language model before first local use. English recognition and saved source text remain available if translation fails. Each device must have the required Android TTS voice installed.
+Development APKs now install as **SCIOBRAILLE Dev** (`com.sciobraille.scanner.dev`) alongside the original SCIOBRAILLE (`com.sciobraille.scanner`). The new app starts with separate history, preferences and learning progress; it does not replace or erase the original app's data. This fixes the package/signing conflict encountered with the 1.2.0 development APK. Release identity stays unchanged.
 
-Production-focused Android scanner built only from the local `BRAILLEVISION`
-folder.
+Verified development build: [run 42203795652](https://github.com/joeldeva/SCIO-FINAL/actions/runs/42203795652), source commit `2ea2e666d1e577b49003e58da43135903430bb0b`. **49 JVM, 3 Android emulator and 41 backend tests passed**; APK signature verified; lint reports 0 errors and 261 warnings. The workflow's Android artifact contains the APK and reports (retained for 30 days). [Checksums, actual model/translation results and limits](docs/VERIFICATION.md).
 
-## Product Scope
+The camera model recognizes **English letters a–z**. Translating its English output into Tamil, Hindi or another language does not enable recognition of that language's Braille writing system. Capitals, numbers, punctuation signs, contracted Grade 2 and Bharati camera recognition are not validated or advertised as supported.
 
-Sciobraille combines three product areas:
+## Use the app
 
-1. **Live Braille Scanner**: point the phone camera at physical, handwritten, or embossed Braille to receive live English text output.
-2. **BrailleEye LMS**: an audio-first, accessible Braille learning path with local progress, milestones, and school-ready reporting contracts.
-3. **Accessible Braille Tools**: Grade 1 text-to-Braille conversion, visual cells, tactile and haptic reading, printed-page OCR, translation, Smart Assist, and learner profiles.
+1. Open Home → Start live scan. Grant camera permission when requested; photo import also works without camera permission.
+2. Hold a flat, well-lit Braille page steady. Use zoom/flash if available, pause/restart, or choose Photo to capture/import an image. For reverse-side embossing choose the orientation in Settings.
+3. Review the recognized text. Low-confidence cells are flagged; use Review to correct text. A repeated reading is stable, not necessarily correct.
+4. Choose a target language and Translate. Original and translated text stay separate. Copy, share, save or use speech controls.
+5. View saved readings and translations in History. Search, filter by date, reuse or delete them. History is capped at 50 entries on this device.
+6. Learn opens the existing six-level curriculum and locally stored progress. Settings controls themes, contrast, text size, speech, processing mode and the backend address.
 
-The scanner remains usable for every account. The LMS is designed for learners, schools, and teachers without changing the scanner flow.
+The app includes a **133-entry translation catalog**, with searchable native names, favorites and recent selections. Actual online availability comes from the configured provider. Offline translation is limited to ML Kit supported models that the user downloads. TTS depends on the voices on the phone. See [the full language matrix](docs/LANGUAGES.md).
 
-## Structure
+## Clone and build an APK
 
-- `backend/` - FastAPI scanner service using `model/best.pt`.
-- `android/` - minimal native Android/Kotlin app.
+Use Git LFS, JDK 17, Android SDK platform 36 and build tools 35.0.0. Minimum supported Android version is 8.0 (API 26). The Gradle wrapper is 8.13, Android Gradle Plugin 8.13.2, Kotlin 2.0.21.
 
-## Backend
-
-```powershell
-cd backend
-python scanner_api.py
+```sh
+git clone --branch codex/multilingual-accessible-scanner https://github.com/joeldeva/SCIO-FINAL.git
+cd SCIO-FINAL
+git lfs pull --include='sciobraille-scanner/android/app/src/main/assets/best_int8.tflite,sciobraille-scanner/backend/model/best.pt,sciobraille-model-lab/benchmark/images/*,DMI.jpeg,Flipped DMI.jpeg'
+cd sciobraille-scanner/android
+# Configure SDK location in local.properties or ANDROID_HOME.
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The backend exposes:
+On Windows use `gradlew.bat`. Android Studio can open the `android` directory. Do not package the small Git LFS pointer instead of the actual model. Debug APKs use a development signing key; an installed APK signed with another key cannot be updated in place. Uninstalling erases local history and lesson progress.
 
-- `GET /api/health`
-- `POST /api/scan-frame`
-- `WS /ws/scan`
-- `POST /api/translate`
+The GitHub **SCIOBRAILLE build and verification** workflow produces a debug APK, test reports and rendered screen checks. Its debug APK has no public backend preconfigured. Offline recognition is bundled; set a backend in Settings for online requests.
 
-Each captured frame is horizontally mirrored inside Sciobraille immediately
-before model inference. No public image-flipping website receives camera data.
-Detection boxes are mapped back to the natural camera-preview coordinates
-after text reconstruction.
+For a store build, configure your existing upload keystore using `SCIOBRAILLE_UPLOAD_STORE_FILE`, `SCIOBRAILLE_UPLOAD_STORE_PASSWORD`, `SCIOBRAILLE_UPLOAD_KEY_ALIAS`, `SCIOBRAILLE_UPLOAD_KEY_PASSWORD` in private local properties or CI secrets, then `./gradlew :app:bundleRelease`. Release builds deliberately refuse to package without signing configured. Do not commit the keystore/passwords. [Release signing details](docs/RELEASE_SIGNING.md).
 
-Final V2 backend inference uses confidence `0.25`, model NMS IoU `0.45`,
-class-agnostic duplicate IoU `0.70`, bilateral preprocessing, and no TTA. A
-Scan tap captures one frame immediately and sends it to the configured backend.
-The UI shows `Scanning` while the backend model runs, then locks one final
-result and stops automatically. If the backend cannot be reached, the app shows
-a connection error instead of substituting an offline-model result. Tap Scan
-again to capture a new result.
+## Run the existing backend
 
-The compact **Photo** action on the Scanner screen can either capture through
-the existing camera flow or choose an image from the device. Selected images
-are horizontally mirrored before backend inference and use the same backend-only
-recognition with a clear connection error if the backend is unavailable.
+Python 3.12 is used for verification. CPU installation avoids downloading CUDA dependencies when no GPU is available.
 
-## Android
-
-Configure `SCIOBRAILLE_BACKEND_URL` in `android/gradle.properties`.
-Release builds must point to HTTPS. Debug builds allow local HTTP for testing.
-
-### USB Backend Connection
-
-The USB debug APK connects to `http://127.0.0.1:8000`. With the phone connected
-and USB debugging authorized, run `android/connect_usb_backend.bat`. It creates
-an ADB reverse tunnel from device port `8000` to the laptop backend on port
-`8088`. Wi-Fi and mobile data are not required. The tunnel must be recreated
-after the phone or cable reconnects.
-
-Use `android/build_cached_gradle.ps1` on this machine if `gradle` is not in PATH.
-
-```powershell
-cd android
-powershell.exe -ExecutionPolicy Bypass -File .\build_cached_gradle.ps1 :app:testDebugUnitTest
-powershell.exe -ExecutionPolicy Bypass -File .\build_cached_gradle.ps1 :app:assembleDebug
-powershell.exe -ExecutionPolicy Bypass -File .\build_cached_gradle.ps1 :app:bundleRelease
+```sh
+cd sciobraille-scanner/backend
+python -m venv .venv
+# Linux/macOS: source .venv/bin/activate
+# Windows: .venv\Scripts\activate
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-runtime.txt
+uvicorn scanner_api:app --host 127.0.0.1 --port 8088 --workers 1 --limit-concurrency 16 --ws-max-size 20971520
 ```
 
-## BrailleEye LMS
+Use `requirements-runtime.txt` for the mobile API; the original `requirements.txt` remains for desktop/training demos. Open `/api/health` to verify real model initialization. Recognition endpoints remain `POST /api/scan-frame` (multipart `frame`) and `/ws/scan` (binary image frames). `/api/capabilities` reports the supported recognition system. `/api/languages` reports current translation targets. Requests to `/api/translate` use `text`, `source_lang` (`en` or `auto`) and `target_lang`. Auto-detection applies to text translation only; scanner source stays English.
 
-The Learn tab contains six levels:
+For USB testing:
 
-1. Dot Explorer: learn the six Braille dot positions with large targets, audio, and haptics.
-2. Letter Builder: learn Grade 1 English Braille letters A-Z.
-3. Letter Recognition: identify Braille letter patterns in guided sessions.
-4. Word Reading: decode starter words cell by cell.
-5. Grade 2 Contractions: learn the first common contractions, with a structure ready for expansion.
-6. Scan and Learn: use scanner output as real-world practice.
-
-Shared LMS components:
-
-- `BrailleCellView` for interactive and display-only Braille cells.
-- `LmsAudioManager` for safe TTS and repeatable instructions.
-- `LmsHapticManager` for optional haptic feedback with no-vibrator fallback.
-- Room-backed `LmsRepository` for lessons, progress, scores, streaks, sync state, and milestones.
-
-### Braille Tools
-
-Open **Learn > Braille Tools** for:
-
-- **Braille Studio**: converts English letters, capitals, numbers, spaces, line breaks, and common punctuation into Grade 1 Braille without inventing patterns for unsupported characters.
-- **Visual and haptic reader**: browse cells, hear dot descriptions, and play, pause, or resume tactile cell sequences.
-- **Tactile Explorer**: explore all six positions with distinct dot haptics and spoken active/inactive state.
-- **Story Reader**: capture or select a printed page and recognize Latin text locally with ML Kit; TTS remains on-device.
-- **Translation**: translates recognized text through the configured backend to Hindi, Tamil, Telugu, Malayalam, Kannada, Spanish, French, German, Chinese, or Japanese. Original text is retained when translation is unavailable.
-- **Smart Assist**: Android speech recognition routes commands to the scanner, lessons, Studio, Story Reader, tactile explorer, progress, or learner profile.
-- **Practice Library**: supplementary numbers, punctuation, functional labels, everyday words, directions, school words, and safety vocabulary with Room-backed completion.
-- **Learner Profile**: stores name, optional age, goal, preferred learning mode, and learning language locally. Certificate names use this profile.
-
-The six-level LMS unlock path remains unchanged. **Today's Practice** uses persisted question scores to prioritize attempted letters below 70% accuracy, then selects the next incomplete Letter Builder lesson.
-
-### Offline And Sync
-
-Lessons, scores, milestones, and progress are saved locally first. Scanner recognition requires the configured backend. Cloud LMS sync is optional and does not delete local data on failure.
-
-For production sync, configure an HTTPS backend with `SCIOBRAILLE_BACKEND_URL`. Free users keep local progress; cloud sync is a premium capability.
-
-### Premium And School Readiness
-
-Free access includes the scanner, Dot Explorer, letters A-E, one recognition practice session, and local progress. Premium or school accounts unlock the full curriculum, scanner learning explanations, cloud sync, reports, and school dashboard support.
-
-No payment, school-code verification, or authentication provider is implemented yet. School codes are retained only for later verified activation. The backend has database and API foundations for schools, teachers, students, classes, analytics, and CSV reports. **Do not expose the prototype LMS API publicly:** its authentication dependency currently accepts every request. Production deployment must add real authentication and authorization.
-
-### Accessibility
-
-LMS controls use text labels, TalkBack descriptions, TTS, optional haptics, and large touch targets. Display-only Braille cells provide a concise cell description; interactive cells expose individual dots. See [ACCESSIBILITY_QA.md](ACCESSIBILITY_QA.md) for the release QA audit and remaining device-testing recommendations.
-
-## Verified Artifacts
-
-- Debug APK: `releases/Sciobraille-Final.apk`
-- Release AAB: not generated in this pass because local Play upload signing is not configured.
-
-The release manifest uses `android:usesCleartextTraffic="false"`.
-
-## Current Verification
-
-Current integrated verification:
-
-- Android unit tests: 23 passed.
-- Backend tests: 31 passed.
-- Debug APK build: passed.
-- Scanner inference code and selected V2 model were not changed by the tools/LMS integration.
-
-Known image:
-`C:\Users\devaj\Downloads\test sciobraille.jpeg`
-
-Verified raw scanner output:
-
-```text
-jaihind
-india
-sciobraille
-isually impaired
-great project
+```sh
+adb reverse tcp:8088 tcp:8088
 ```
 
-Verified corrected display output restores `visually impaired`. Benchmark accuracy always uses the raw output above.
+Enter `http://127.0.0.1:8088` in the debug app's Settings → Backend address. For a release use an HTTPS URL; build-time defaults can be set with `SCIOBRAILLE_BACKEND_URL`. No translation API key belongs in Android. Existing desktop/USB scripts remain available.
 
-Backend verification:
+## Translation configuration
 
-- routes include `/api/health` and `/api/scan-frame`
-- `ok=True`
-- `stable=False` on the first frame and `stable=True` after a repeated matching frame
-- detections: `50`
-- mean confidence: approximately `0.86`
+Set environment variables **before starting the backend**. A `.env.example` documents them; the app does not load `.env` automatically. Never put real keys into Git.
 
-## Before Play Upload
+| Provider | Configuration | Costs / limits |
+|---|---|---|
+| Disabled (default) | `TRANSLATION_PROVIDER=disabled` | English passthrough only online; installed Android models still translate locally |
+| Google Cloud Translation v2 | `TRANSLATION_PROVIDER=google`, `TRANSLATION_API_KEY` | Official API; billing, quotas and supported language set belong to your account. Broad coverage, no key in APK |
+| LibreTranslate | `TRANSLATION_PROVIDER=libretranslate`, `LIBRETRANSLATE_URL`, optional `TRANSLATION_API_KEY` | Self-hostable open-source service; compute/hosting costs. Only installed English→target pairs are advertised |
+| Legacy community adapter | `TRANSLATION_PROVIDER=community` | Explicit evaluation-only option retained from the prototype; unofficial web adapter, no reliability guarantee. Not suitable as the production default |
 
-- Replace `SCIOBRAILLE_BACKEND_URL` with the real HTTPS backend URL.
-- Sign the release through the Play upload/signing workflow.
-- Publish a privacy policy covering camera frames sent to the backend.
+Provider failures return an error and never relabel source text as a successful translation. The UI preserves the original. Language availability is fetched from the provider and cached for an hour. Google/Libre requests have timeouts and bounded translation concurrency. API tests use controlled provider contracts, clearly separated from live translation smoke tests.
 
-Production notes:
+## Offline behavior
 
-- Backend deployment: `docs/BACKEND_DEPLOYMENT.md`
-- Release signing: `docs/RELEASE_SIGNING.md`
-- Model class expansion: `docs/MODEL_CLASS_EXPANSION.md`
-- Historical offline prototype notes: `docs/OFFLINE_FALLBACK.md`
-- Prototype references: `docs/prototype/`
-- Play checklist: `docs/PLAY_PRODUCTION_CHECKLIST.md`
-- Privacy policy draft: `docs/PRIVACY_POLICY_DRAFT.md`
-- Play data safety draft: `docs/DATA_SAFETY.md`
-- Play Store metadata draft: `docs/PLAY_STORE_METADATA.md`
-- Release status: `docs/RELEASE_STATUS.md`
-- LMS API and school reports: `backend/LMS_API.md`
-- LMS accessibility QA: `ACCESSIBILITY_QA.md`
+- **Offline only:** uses bundled real TFLite inference; recognition/translation do not call the backend. English history and lessons stay local.
+- **Auto:** tries device inference first; uncertain or missing results can use the backend. Network failures back off for 30 seconds while device recognition remains available.
+- **Online preferred:** tries the backend, falling back to the device if unavailable.
+- In Languages, long press a supported language → Download offline model. Downloads are explicit and need connectivity. Later translation checks installed models and never silently downloads during scanning. Delete individual models from the same menu.
+- Native TTS selects an appropriate installed voice. Offline only requires an offline voice. Speech pauses on app backgrounding/audio focus loss; background playback is not implemented. Engines without word-range callbacks may resume from the current chunk rather than the exact word.
+
+## What is preserved
+
+Real model weights, YOLO inference/preprocessing, CameraX, the TFLite detector, HTTP/WebSocket APIs, local Room learning data, 57 English lessons across six levels, exercises and progress, Braille Studio, existing text/Braille tools, haptic/audio learning and exports. Local lessons no longer depend on an unimplemented payment flow. Prototype school/cloud sync endpoints are **disabled by default** because their original authentication accepts every request. `BRAILLE_ENABLE_LMS_API=development` restores them only for isolated development. Cloud sync needs proper per-user authentication/authorization before public use.
+
+## Verification and remaining work
+
+[Audit](docs/REPOSITORY_AUDIT_2026-11-05.md) · [Architecture](docs/ARCHITECTURE.md) · [Capability status](docs/CAPABILITY_STATUS.md) · [Verification report](docs/VERIFICATION.md) · [Device acceptance procedure](docs/DEVICE_ACCEPTANCE.md)
+
+The three available labeled physical photographs are a small, non-independent regression set. They do not justify a high-accuracy production claim. No retraining or new quantization has been claimed. General perspective correction, arbitrary rotation, reliable punctuation/numbers/contractions and non-English Braille need suitable data/models and validation. Native offline inference, PDF export and an actual downloaded Tamil translation model passed emulator checks. Physical Android camera/latency/memory/battery, TalkBack usability, language/model quality beyond that smoke test, real device speech and release-signing validation remain explicit release gates.
+
+UI copy and lessons remain primarily English; Unicode translation output and speech can use other languages. Older project reports describe historical builds and are superseded by this README and the linked verification report.

@@ -1,0 +1,20 @@
+{
+  "scope": "Host LiteRT 2.3.0, two CPU threads. Verifies the actual bundled tensor contract and real invocation; not Android latency or Kotlin parser parity.",
+  "model_sha256": "7e5cf70ecb47f868d69623c7eec8cbd25bc8a547ab242318f1e4a2450fb5561c",
+  "model_bytes": 11551206,
+  "input_shape": [
+    1,
+    640,
+    640,
+    3
+  ],
+  "output_shape": [
+    1,
+    30,
+    8400
+  ],
+  "input_dtype": "<class 'numpy.float32'>",
+  "output_dtype": "<class 'numpy.float32'>",
+  "first_invoke_ms": 115.53533100004643,
+  "candidate_anchors_above_025": 463
+}

@@ -18,7 +18,7 @@ class EntitlementManager(context: Context) {
         AccountType.valueOf(preferences.getString(KEY_ACCOUNT_TYPE, AccountType.FREE.name).orEmpty())
     }.getOrDefault(AccountType.FREE)
 
-    fun hasFullLearningAccess(): Boolean = accountType() != AccountType.FREE
+    fun hasFullLearningAccess(): Boolean = true // Bundled lessons are available locally.
 
     fun canAccessLetter(letter: Char): Boolean = hasFullLearningAccess() || letter.uppercaseChar() in 'A'..'E'
 
@@ -28,7 +28,7 @@ class EntitlementManager(context: Context) {
         else -> hasFullLearningAccess()
     }
 
-    fun canUseCloudSync(): Boolean = hasFullLearningAccess()
+    fun canUseCloudSync(): Boolean = false // Requires per-user authorization before public deployment.
 
     fun canAccessTeacherDashboard(): Boolean = accountType() == AccountType.TEACHER || accountType() == AccountType.ADMIN
 

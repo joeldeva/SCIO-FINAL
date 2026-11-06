@@ -2,11 +2,15 @@ package com.sciobraille.scanner
 
 import android.content.Context
 
+enum class ThemePreference { SYSTEM, LIGHT, DARK }
 enum class ScannerPreference { AUTO, ONLINE_PREFERRED, OFFLINE_PREFERRED }
 enum class LearningModePreference { AUDIO, VISUAL, HAPTIC, MIXED }
 enum class TextSizePreference(val scale: Float) { STANDARD(1f), LARGE(1.18f), EXTRA_LARGE(1.35f) }
 
 data class AccessibilityPreferences(
+    val theme: ThemePreference = ThemePreference.SYSTEM,
+    val mirrorInput: Boolean = false,
+    val voiceName: String = "",
     val speechRate: Float = 0.92f,
     val speechPitch: Float = 1f,
     val autoSpeakScan: Boolean = false,
@@ -34,6 +38,9 @@ class AccessibilityPreferencesStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
     fun load(): AccessibilityPreferences = AccessibilityPreferences(
+        theme = enumValue(preferences.getString("theme", null), ThemePreference.SYSTEM),
+        mirrorInput = preferences.getBoolean("mirrorInput", false),
+        voiceName = preferences.getString("voiceName", "").orEmpty(),
         speechRate = preferences.getFloat("speechRate", 0.92f).coerceIn(0.5f, 1.5f),
         speechPitch = preferences.getFloat("speechPitch", 1f).coerceIn(0.5f, 1.5f),
         autoSpeakScan = preferences.getBoolean("autoSpeakScan", false),
@@ -59,6 +66,9 @@ class AccessibilityPreferencesStore(context: Context) {
 
     fun save(value: AccessibilityPreferences) {
         preferences.edit()
+            .putString("theme", value.theme.name)
+            .putBoolean("mirrorInput", value.mirrorInput)
+            .putString("voiceName", value.voiceName)
             .putFloat("speechRate", value.speechRate)
             .putFloat("speechPitch", value.speechPitch)
             .putBoolean("autoSpeakScan", value.autoSpeakScan)

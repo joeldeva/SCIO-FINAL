@@ -1,3 +1,5 @@
+> Historical document. For the current development build, use the main SCIOBRAILLE README and `docs/VERIFICATION.md`; older capability/test claims below do not certify version 1.2.0-dev.
+
 # BrailleEye LMS Accessibility QA
 
 Date: 2026-09-19

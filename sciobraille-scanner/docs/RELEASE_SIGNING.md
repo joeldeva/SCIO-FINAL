@@ -3,24 +3,33 @@
 The project supports Play upload signing without storing passwords or keystores
 in source control.
 
-## Current Local Upload Key
+## Development installation identity
 
-A local upload keystore has been generated for this machine at:
+From 1.2.1-dev, debug builds use `com.sciobraille.scanner.dev` and the launcher label
+`SCIOBRAILLE Dev`. Release builds retain `com.sciobraille.scanner`; the existing
+V2 experiment retains `.v2test`. FileProvider authorities follow the application
+ID. The debug app can coexist with the original app without replacing its data.
+Its local data is separate and is not automatically migrated from the original.
 
-```text
-C:/Users/devaj/.sciobraille/keystores/sciobraille-upload.jks
-```
+Updating an installed **Dev** build still requires the same debug signing key.
+CI uses temporary debug keys unless a stable signing setup is supplied; a new
+package ID fixes the conflict with the original app, not key continuity between
+different development build machines. Production updates require the original
+production signing identity. Do not uninstall the original app merely to try
+this separate development build.
 
-The corresponding signing values are stored in:
+## Upload key ownership and availability
 
-```text
-android/local.properties
-```
+The development APK from GitHub Actions uses a temporary debug key. No production
+upload keystore or passwords were provided to this development environment, and
+no production-signed APK or AAB is claimed. Use the project's existing upload key
+on your trusted build machine. Historical notes refer to a key on the original
+developer's Windows computer; that does not make it available here.
 
-Do not upload `local.properties` or the `.jks` file to GitHub. Back up the
-keystore and password values in a secure password manager before creating the
-Play Console app. If this file is lost after Play upload signing is configured,
-you will need to reset the upload key through Google Play Console support.
+Do not upload `local.properties` or the `.jks` file to GitHub. Keep the keystore
+and its passwords backed up securely. Debug builds from different CI machines
+may use different keys; Android cannot update an installed app signed by a
+different key. Uninstalling the old build deletes local history and progress.
 
 ## Local Properties
 
@@ -50,10 +59,14 @@ CI can provide the same values as environment variables:
 
 ## Build
 
-```powershell
-cd android
-powershell.exe -ExecutionPolicy Bypass -File .\build_cached_gradle.ps1 :app:bundleRelease
+```sh
+cd sciobraille-scanner/android
+./gradlew :app:bundleRelease
 ```
+
+On Windows use `gradlew.bat :app:bundleRelease`. Configure an HTTPS backend for
+online production use. The public service's authentication, request limits and
+translation provider credentials must be configured before release.
 
 Release builds now fail if upload-signing values are missing. This prevents a
 debug-signed or unsigned release artifact from being mistaken for a Play upload.
