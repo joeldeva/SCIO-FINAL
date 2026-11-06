@@ -18,7 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Fetch the real Android model
-        run: git lfs pull --include='sciobraille-scanner/android/app/src/main/assets/best_int8.tflite'
+        run: |
+          git lfs pull --include='sciobraille-scanner/android/app/src/main/assets/best_int8.tflite,sciobraille-model-lab/benchmark/images/test_sciobraille.jpeg'
+          mkdir -p sciobraille-scanner/android/app/src/androidTest/assets
+          cp sciobraille-model-lab/benchmark/images/test_sciobraille.jpeg sciobraille-scanner/android/app/src/androidTest/assets/
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -36,6 +39,22 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
           sha256sum app/build/outputs/apk/debug/app-debug.apk > app/build/reports/apk-sha256.txt
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Native PDF and real offline model on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            cd sciobraille-scanner/android && bash gradlew --no-daemon --max-workers=2 :app:connectedDebugAndroidTest
+            adb exec-out run-as com.sciobraille.scanner cat files/offline-device-smoke.json > sciobraille-scanner/android/app/build/reports/offline-device-smoke.json
+            adb exec-out run-as com.sciobraille.scanner cat files/certificate-device-test.pdf > sciobraille-scanner/android/app/build/reports/certificate-device-test.pdf
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -3,24 +3,18 @@
 The project supports Play upload signing without storing passwords or keystores
 in source control.
 
-## Current Local Upload Key
+## Upload key ownership
 
-A local upload keystore has been generated for this machine at:
+The development APK from GitHub Actions uses a temporary debug key. No production
+upload keystore or passwords were provided to this development environment, and
+no production-signed APK or AAB is claimed. Use the project's existing upload key
+on your trusted build machine. Historical notes refer to a key on the original
+developer's Windows computer; that does not make it available here.
 
-```text
-C:/Users/devaj/.sciobraille/keystores/sciobraille-upload.jks
-```
-
-The corresponding signing values are stored in:
-
-```text
-android/local.properties
-```
-
-Do not upload `local.properties` or the `.jks` file to GitHub. Back up the
-keystore and password values in a secure password manager before creating the
-Play Console app. If this file is lost after Play upload signing is configured,
-you will need to reset the upload key through Google Play Console support.
+Do not upload `local.properties` or the `.jks` file to GitHub. Keep the keystore
+and its passwords backed up securely. Debug builds from different CI machines
+may use different keys; Android cannot update an installed app signed by a
+different key. Uninstalling the old build deletes local history and progress.
 
 ## Local Properties
 
@@ -50,10 +44,14 @@ CI can provide the same values as environment variables:
 
 ## Build
 
-```powershell
-cd android
-powershell.exe -ExecutionPolicy Bypass -File .\build_cached_gradle.ps1 :app:bundleRelease
+```sh
+cd sciobraille-scanner/android
+./gradlew :app:bundleRelease
 ```
+
+On Windows use `gradlew.bat :app:bundleRelease`. Configure an HTTPS backend for
+online production use. The public service's authentication, request limits and
+translation provider credentials must be configured before release.
 
 Release builds now fail if upload-signing values are missing. This prevents a
 debug-signed or unsigned release artifact from being mistaken for a Play upload.
