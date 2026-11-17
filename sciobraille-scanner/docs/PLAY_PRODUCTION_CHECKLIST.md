@@ -38,9 +38,13 @@
 - TTS: speaks recognized text locally.
 - Local LMS progress: lessons, answers, scores, streaks, milestones, and certificates are stored on device.
 - Cloud sync, school dashboards, reports, premium billing, and public accounts are disabled.
+- Optional model contributions require transcript review and explicit consent;
+  no scanner image is uploaded automatically.
 - Publish the offline privacy policy from repository `/docs` with GitHub Pages.
 - Use `PRIVACY_POLICY_DRAFT.md` as the starting text.
 - Use `DATA_SAFETY.md` for the Play Console data safety form.
+- Declare optional contribution photos and corrected text consistently with the
+  public privacy policy.
 - Use `PLAY_STORE_METADATA.md` for the first listing draft.
 - Add a v2 training task for `MODEL_CLASS_EXPANSION.md`; the current model is
   still a 26-class `a-z` detector.

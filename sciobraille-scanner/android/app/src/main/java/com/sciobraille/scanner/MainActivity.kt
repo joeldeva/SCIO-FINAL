@@ -187,6 +187,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private lateinit var translatedOutputText: TextView
     private lateinit var translateButton: Button
     private lateinit var speakTranslationButton: Button
+    private lateinit var contributeSampleButton: Button
     private lateinit var historyList: LinearLayout
     private lateinit var learnTitleText: TextView
     private lateinit var learnSubtitleText: TextView
@@ -242,6 +243,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private val lmsAudioManager by lazy { LmsAudioManager { textToSpeech.takeIf { isTtsReady } } }
     private val lmsHapticManager by lazy { LmsHapticManager(this) }
     private val offlineBrailleDetector by lazy { OfflineBrailleDetector(this) }
+    private val trainingContributionManager by lazy { TrainingContributionManager(this) }
     private val entitlementManager by lazy {
         EntitlementManager(this, gatingEnabled = BuildConfig.PREMIUM_GATING_ENABLED)
     }
@@ -565,6 +567,23 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         resultActions.addView(actionButton("Share", false) { shareOutput() }, LinearLayout.LayoutParams(0, dp(56), 1f))
         resultCard.addView(resultActions)
 
+        contributeSampleButton = actionButton("Improve the model", false) {
+            showTrainingContributionDialog()
+        }.apply {
+            isEnabled = false
+            alpha = 0.55f
+            contentDescription = "Improve the Sciobraille model with this scan. Optional contribution."
+        }
+        resultCard.addView(contributeSampleButton, LinearLayout.LayoutParams(-1, dp(54)).apply {
+            topMargin = dp(12)
+        })
+        resultCard.addView(TextView(this).apply {
+            text = "Optional: review and share one scan for future model improvement. Nothing is uploaded automatically."
+            textSize = 13f
+            setTextColor(ScioColors.SECONDARY)
+            setPadding(0, dp(8), 0, 0)
+        })
+
         resultCard.addView(TextView(this).apply {
             text = "Translate & Speak"
             textSize = 20f
@@ -782,8 +801,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             "Smart Assist voice commands and multilingual translation"
         )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
         body.addView(infoCard("Privacy", listOf(
-            "Braille recognition runs on this device. Camera images are not uploaded by this release.",
-            "Scan history, learner profile, and lesson progress stay on this device unless you explicitly share them."
+            "Braille recognition runs on this device. Camera images are never uploaded automatically.",
+            "Scan history, learner profile, and lesson progress stay on this device unless you explicitly share them.",
+            "After a scan, Improve the model can create one voluntary contribution package only after you review the text and approve the dedicated consent statement."
         )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
         body.addView(actionButton("Open Privacy Policy", false) {
             runCatching {
@@ -4097,6 +4117,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             startCamera()
             return
         }
+        clearPendingTrainingContribution()
         isScanning = true
         pendingFrames = 0
         pendingSinceMs = 0L
@@ -4227,6 +4248,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun scanBrailleImageFile(frameFile: File) {
         if (isScanning) stopScanning("Stopped")
+        clearPendingTrainingContribution()
         isScanning = true
         isFrameInFlight = true
         scanButton.text = "Scanning"
@@ -4239,7 +4261,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         networkExecutor.execute {
             try {
                 val payload = scanBrailleFrame(frameFile)
+                val contributionReady = runCatching {
+                    trainingContributionManager.rememberModelInput(frameFile, payload)
+                }.getOrDefault(false)
                 runOnUiThread {
+                    setContributionAvailable(contributionReady)
                     if (isScanning) completeScan(payload)
                 }
             } catch (_: Exception) {
@@ -4297,7 +4323,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     networkExecutor.execute {
                         try {
                             val payload = scanBrailleFrame(frameFile)
+                            val contributionReady = runCatching {
+                                trainingContributionManager.rememberModelInput(frameFile, payload)
+                            }.getOrDefault(false)
                             runOnUiThread {
+                                setContributionAvailable(contributionReady)
                                 if (isScanning) {
                                     completeScan(payload)
                                 }
@@ -4421,6 +4451,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 return
             }
         } else {
+            lastOutput = ""
             outputText.text = "Hold steady. No Braille detected yet."
             braillePreviewText.text = ""
         }
@@ -4648,6 +4679,148 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         shareText(lastOutput)
     }
 
+    private fun clearPendingTrainingContribution() {
+        runCatching { trainingContributionManager.clearPending() }
+        setContributionAvailable(false)
+    }
+
+    private fun setContributionAvailable(available: Boolean) {
+        if (!::contributeSampleButton.isInitialized) return
+        contributeSampleButton.isEnabled = available
+        contributeSampleButton.alpha = if (available) 1f else 0.55f
+    }
+
+    private fun showTrainingContributionDialog() {
+        if (!trainingContributionManager.hasPending()) {
+            toast("Scan a Braille image before contributing")
+            setContributionAvailable(false)
+            return
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), 0)
+        }
+        content.addView(TextView(this).apply {
+            text = "Optional contribution\n\nSciobraille will create one ZIP containing the model-facing Braille image, predicted boxes, model output, your corrected English text, and app/model version. Nothing is sent automatically. You choose the sharing app and recipient.\n\nThe sample may be reviewed, annotated, retained, and used to train, evaluate, and distribute future Sciobraille models. Do not submit faces, identity documents, addresses, medical or school records, or other personal information."
+            setTextColor(ScioColors.TEXT)
+            textSize = 15f
+            setLineSpacing(0f, 1.2f)
+        })
+        content.addView(TextView(this).apply {
+            text = "Correct English text"
+            setTextColor(ScioColors.TEXT)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(18), 0, dp(6))
+        })
+        val correctedText = EditText(this).apply {
+            setText(lastOutput)
+            hint = "Type the exact text on the Braille page"
+            minLines = 2
+            setTextColor(ScioColors.TEXT)
+            setHintTextColor(ScioColors.MUTED)
+            background = rounded(ScioColors.SURFACE, ScioColors.OUTLINE, 1, 6)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            contentDescription = "Correct English ground truth text for this Braille image"
+        }
+        content.addView(correctedText, LinearLayout.LayoutParams(-1, -2))
+        val notes = EditText(this).apply {
+            hint = "Optional notes: lighting, distance, reverse-side Braille"
+            maxLines = 3
+            setTextColor(ScioColors.TEXT)
+            setHintTextColor(ScioColors.MUTED)
+            background = rounded(ScioColors.SURFACE, ScioColors.OUTLINE, 1, 6)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            contentDescription = "Optional scan condition notes"
+        }
+        content.addView(notes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+
+        val contentConfirmation = CheckBox(this).apply {
+            text = "I confirm this image contains only Braille content that I am allowed to share and no sensitive personal information."
+            contentDescription = text
+        }
+        val ageConfirmation = CheckBox(this).apply {
+            text = "I am at least 18, or I am the parent, guardian, or authorized school representative submitting this sample."
+            contentDescription = text
+        }
+        val useConsent = CheckBox(this).apply {
+            text = "I voluntarily allow this sample to be used for Sciobraille research, annotation, model training, evaluation, and model distribution."
+            contentDescription = text
+        }
+        content.addView(contentConfirmation)
+        content.addView(ageConfirmation)
+        content.addView(useConsent)
+
+        val scroll = ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Improve the Sciobraille model")
+            .setView(scroll)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Create and share", null)
+            .create()
+        dialog.setOnShowListener {
+            val positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            fun updateEnabled() {
+                positive.isEnabled = correctedText.text.toString().trim().isNotEmpty() &&
+                    contentConfirmation.isChecked && ageConfirmation.isChecked && useConsent.isChecked
+            }
+            val watcher = object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = updateEnabled()
+                override fun afterTextChanged(s: Editable?) = Unit
+            }
+            correctedText.addTextChangedListener(watcher)
+            contentConfirmation.setOnCheckedChangeListener { _, _ -> updateEnabled() }
+            ageConfirmation.setOnCheckedChangeListener { _, _ -> updateEnabled() }
+            useConsent.setOnCheckedChangeListener { _, _ -> updateEnabled() }
+            updateEnabled()
+            positive.setOnClickListener {
+                val correctedValue = correctedText.text.toString()
+                val notesValue = notes.text.toString()
+                positive.isEnabled = false
+                positive.text = "Preparing..."
+                networkExecutor.execute {
+                    val result = runCatching {
+                        trainingContributionManager.createExport(
+                            correctedValue,
+                            notesValue
+                        )
+                    }
+                    runOnUiThread {
+                        dialog.dismiss()
+                        result.onSuccess(::shareTrainingContribution)
+                            .onFailure { toast("Could not create the contribution package") }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun shareTrainingContribution(export: ContributionExport) {
+        runCatching {
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", export.archive)
+            startActivity(
+                Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = "application/zip"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        putExtra(Intent.EXTRA_EMAIL, arrayOf("devajoel8@gmail.com"))
+                        putExtra(Intent.EXTRA_SUBJECT, "Sciobraille training contribution ${export.id}")
+                        putExtra(
+                            Intent.EXTRA_TEXT,
+                            "Voluntary Sciobraille model contribution ${export.id}. " +
+                                "Keep this ID if you need to request deletion of the stored source package."
+                        )
+                        clipData = ClipData.newUri(contentResolver, "Sciobraille contribution", uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    },
+                    "Share training contribution"
+                )
+            )
+        }.onFailure { toast("No compatible sharing app is available") }
+    }
+
     private fun speakText(value: String) {
         handleSpeechStatus(multilingualTtsManager.speakOriginal(value), AppLanguage.ENGLISH)
     }
@@ -4692,6 +4865,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         pendingStoryPhotoFile = null
         pendingBraillePhotoFile?.delete()
         pendingBraillePhotoFile = null
+        runCatching { trainingContributionManager.clearPending() }
         runCatching { offlineBrailleDetector.closeIfOpened() }
         runCatching { storyTextRecognizer.close() }
         super.onDestroy()

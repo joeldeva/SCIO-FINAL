@@ -21,6 +21,12 @@
 **/.DS_Store
 **/Thumbs.db
 
+# Voluntary user-contributed scans contain private image/text data. Keep the
+# intake workflow, but never commit received packages, manifests, or reviews.
+sciobraille-model-lab/datasets/user_contributions/quarantine/
+sciobraille-model-lab/datasets/user_contributions/contributions_manifest.csv
+sciobraille-model-lab/datasets/user_contributions/**/*.zip
+
 # V2 training checkpoints and duplicate export workspace. Keep locally; commit
 # final/candidate best checkpoints and canonical files under exports/v2_master.
 sciobraille-model-lab/models/v2_master/experiments/**/weights/epoch*.pt

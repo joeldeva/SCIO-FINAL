@@ -1,13 +1,33 @@
-# Sciobraille Play Data Safety - Version 1.2.0
+# Sciobraille Play Data Safety - Version 1.2.1
 
 Use these answers only for the offline Play build produced from this commit.
 Reassess them before enabling accounts, analytics, cloud sync, or a backend.
 
 ## Data Collection
 
-Sciobraille does not transmit Braille camera frames, selected images, recognized
-text, scan history, learner profile, or LMS progress to the developer. Core
-recognition and learning run on the device.
+Sciobraille does not automatically transmit Braille camera frames, selected
+images, recognized text, scan history, learner profile, or LMS progress to the
+developer. Core recognition and learning run on the device.
+
+After a scan, the user may deliberately choose **Improve the model**, correct
+the ground-truth text, approve a dedicated three-part consent statement, and
+share a contribution ZIP through Android's share sheet. The package contains
+the selected model-facing image, predicted boxes, raw model text, corrected
+text, optional notes, model/app metadata, random contribution ID, and consent
+record. It contains no account, advertising ID, or device identifier.
+
+For a conservative Play Console declaration, disclose the following as
+**optional, user-initiated collection** when a contribution is sent to the
+developer:
+
+- Photos: Braille training image.
+- Other user-generated content: corrected transcript and optional notes.
+- Purpose: app functionality and developer communications; describe model
+  improvement/research in the privacy policy and reviewer notes.
+- Processing: not ephemeral when the package is accepted for dataset review.
+- Sharing: no sale or advertising; transfer is initiated by the user through
+  Android's share sheet.
+- Deletion: source contribution deletion can be requested by contribution ID.
 
 Google ML Kit can contact Google to download an optional translation model.
 Android TTS, speech recognition, and sharing are system/user-selected services;
@@ -19,7 +39,9 @@ current SDK-specific disclosure guidance before submission.
 - Scan history and recognized text: SharedPreferences.
 - Lessons, progress, scores, streaks, milestones, and certificates: Room.
 - Learner profile and accessibility preferences: SharedPreferences.
-- Temporary captured images: app cache, deleted after processing.
+- Temporary captured images and contribution exports: app cache. Pending images
+  are deleted when replaced or the app closes; exports are pruned after 24
+  hours and may also be cleared by Android.
 
 Users can clear local data in Android settings or uninstall the app.
 
@@ -43,6 +65,7 @@ Users can clear local data in Android settings or uninstall the app.
 ## Submission Checks
 
 - Confirm the merged release manifest matches this document.
-- Confirm the public privacy URL is live.
+- Confirm the public privacy URL includes the contribution section and is live.
+- Declare optional contribution photos/text consistently in Play Console.
 - Review the current Play Data Safety definitions in Play Console.
 - Re-run this assessment whenever dependencies or network behavior change.

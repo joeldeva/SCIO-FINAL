@@ -26,6 +26,8 @@ Key features:
 - Scan and Learn mode for real-world Braille practice.
 - Local offline progress, streaks, milestones, and certificates.
 - Private on-device scan history and learning progress.
+- Optional, consent-based model-improvement contribution packages. Scans are
+  never uploaded automatically.
 
 Sciobraille is designed with accessibility in mind: large controls, TalkBack
 labels, spoken instructions, optional haptics, and local-first progress.
@@ -36,8 +38,9 @@ Education
 
 ## Content Rating Notes
 
-Educational app. No user-generated public content. Camera is used for Braille
-scanning.
+Educational app. No public social feed or public user-generated content. Camera
+is used for Braille scanning. A user may optionally share one reviewed Braille
+sample with the project for model improvement after explicit consent.
 
 ## Support Contact
 

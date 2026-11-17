@@ -36,8 +36,8 @@ android {
         applicationId 'com.sciobraille.scanner'
         minSdk 26
         targetSdk 36
-        versionCode 14
-        versionName '1.2.0'
+        versionCode 15
+        versionName '1.2.1'
         buildConfigField 'String', 'SCIOBRAILLE_BACKEND_URL', "\"${configuredBackendUrl}\""
         buildConfigField 'String', 'OFFLINE_MODEL_ASSET', '"best_int8.tflite"'
         buildConfigField 'String', 'APP_TITLE_LABEL', '"ScioBraille"'

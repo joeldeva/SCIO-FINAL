@@ -50,6 +50,19 @@ The compact **Photo** action can capture through the camera or choose an image
 from the device. Both paths use the same on-device orientation and recognition
 pipeline.
 
+### Voluntary Training Contributions
+
+After a processed scan, **Improve the model** lets an adult or authorized
+representative review the exact English text and optionally describe scan
+conditions. A contribution is packaged locally only after explicit consent.
+Nothing is uploaded automatically; Android's share sheet controls transfer.
+
+Received ZIPs must be validated with
+`sciobraille-model-lab/scripts/import_user_contributions.py`. They enter a
+private, Git-ignored quarantine and require privacy, duplicate, transcript, and
+manual YOLO annotation review before any future dataset build. Predicted boxes
+are never accepted as ground truth automatically.
+
 ## Android
 
 Normal debug and release builds are offline-only. Configure
@@ -99,7 +112,7 @@ Open **Learn > Braille Tools** for:
 - **Visual and haptic reader**: browse cells, hear dot descriptions, and play, pause, or resume tactile cell sequences.
 - **Tactile Explorer**: explore all six positions with distinct dot haptics and spoken active/inactive state.
 - **Story Reader**: capture or select a printed page and recognize Latin text locally with ML Kit; TTS remains on-device.
-- **Translation**: translates recognized text through the configured backend to Hindi, Tamil, Telugu, Malayalam, Kannada, Spanish, French, German, Chinese, or Japanese. Original text is retained when translation is unavailable.
+- **Translation**: translates recognized text with optional on-device ML Kit language models. Original text is retained when translation is unavailable.
 - **Smart Assist**: Android speech recognition routes commands to the scanner, lessons, Studio, Story Reader, tactile explorer, progress, or learner profile.
 - **Practice Library**: supplementary numbers, punctuation, functional labels, everyday words, directions, school words, and safety vocabulary with Room-backed completion.
 - **Learner Profile**: stores name, optional age, goal, preferred learning mode, and learning language locally. Certificate names use this profile.
@@ -110,11 +123,11 @@ The six-level LMS unlock path remains unchanged. **Today's Practice** uses persi
 
 Lessons, scores, milestones, certificates, and progress are stored locally in
 Room. Scanner recognition also runs locally. Cloud LMS synchronization is
-disabled in version 1.2.0.
+disabled in version 1.2.1.
 
 ### Premium And School Readiness
 
-The complete local curriculum is unlocked in version 1.2.0. The account,
+The complete local curriculum is unlocked in version 1.2.1. The account,
 premium, school dashboard, and report contracts remain future architecture and
 are not enabled in the Play release.
 
@@ -126,8 +139,8 @@ LMS controls use text labels, TalkBack descriptions, TTS, optional haptics, and 
 
 ## Verified Artifacts
 
-- Debug APK: `releases/Sciobraille-1.2.0-offline-debug.apk`
-- Signed release AAB: `releases/Sciobraille-1.2.0-play.aab`.
+- Debug APK: `releases/Sciobraille-1.2.1-offline-debug.apk`
+- Signed release AAB: `releases/Sciobraille-1.2.1-play.aab`.
 
 The release manifest uses `android:usesCleartextTraffic="false"`.
 
@@ -135,7 +148,7 @@ The release manifest uses `android:usesCleartextTraffic="false"`.
 
 Current integrated verification:
 
-- Android unit tests: 37 passed.
+- Android unit tests: 39 passed.
 - Backend tests: 31 passed.
 - Debug APK build: passed.
 - Signed Play AAB build and signature verification: passed.
@@ -171,7 +184,7 @@ Backend verification:
 ## Before Play Upload
 
 - Publish `docs/privacy-policy.html` using GitHub Pages and use its URL in Play Console.
-- Upload `releases/Sciobraille-1.2.0-play.aab` to Play internal testing.
+- Upload `releases/Sciobraille-1.2.1-play.aab` to Play internal testing.
 
 Production notes:
 

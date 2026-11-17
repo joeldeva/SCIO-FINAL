@@ -16,7 +16,12 @@
   <p>Sciobraille is an offline-first Android application for recognizing physical Braille and learning Braille.</p>
 
   <h2>Camera and images</h2>
-  <p>Sciobraille uses the camera only when you scan Braille or capture a page. Braille recognition runs on your device. Camera frames and selected Braille images are not uploaded to Sciobraille servers by this release. Temporary image files created for scanning are deleted after processing.</p>
+  <p>Sciobraille uses the camera only when you scan Braille or capture a page. Braille recognition runs on your device. Camera frames and selected Braille images are never uploaded automatically. Temporary scan images are normally deleted after processing.</p>
+
+  <h2>Optional model-improvement contributions</h2>
+  <p>After processing a Braille scan, you may choose <strong>Improve the model</strong>. This optional action asks you to review or correct the English text and approve a separate consent statement. Only then does Sciobraille create a contribution ZIP containing the model-facing Braille image, predicted character boxes, raw model output, corrected text, optional scan notes, model/app version, a random contribution ID, and a consent record. It does not add your name, account, advertising ID, or device identifier.</p>
+  <p>Sciobraille does not send this package automatically. Android's share sheet lets you choose whether, how, and to whom it is transferred. If you send it to the Sciobraille project, maintainers may review, annotate, retain, and use it for model research, training, evaluation, and distribution. Do not contribute faces, identity documents, addresses, medical or school records, or other personal information. Contributions are restricted to adults, parents/guardians, or authorized school representatives.</p>
+  <p>You may request deletion of a stored source contribution by emailing the address below with its contribution ID. The ID is included in the share subject and package metadata. A deletion request can remove retained source records, but it may not be technically possible to remove a sample's learned influence from a model that was already trained and distributed.</p>
 
   <h2>Information stored on your device</h2>
   <p>Scan history, recognized text, learner profile, lesson progress, scores, streaks, milestones, preferences, and certificates are stored locally on your device. Sciobraille does not require an account and does not synchronize this information to a Sciobraille server in this release. You can remove this information by clearing the app data or uninstalling the app.</p>
