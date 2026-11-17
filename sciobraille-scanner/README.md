@@ -2,7 +2,7 @@
 
 ## Multilingual scan speech
 
-Scanner preserves raw, recognized, corrected, and translated text separately. Recognized English text first uses the existing FastAPI `/api/translate` endpoint, then Google ML Kit on-device translation if backend translation fails. Translated text uses an Android TTS voice matching the selected language. Supported targets are English, Hindi, Tamil, Telugu, Malayalam, Kannada, Spanish, French, German, Chinese, and Japanese. ML Kit downloads each language model before first local use. English recognition and saved source text remain available if translation fails. Each device must have the required Android TTS voice installed.
+Scanner preserves raw, recognized, corrected, and translated text separately. The Play release uses Google ML Kit on-device translation and never sends recognized text to the Sciobraille backend. ML Kit downloads each selected language model before first use; downloaded models then work offline. Translated text uses an Android TTS voice matching the selected language. English recognition and saved source text remain available if translation or a TTS voice is unavailable.
 
 Production-focused Android scanner built only from the local `BRAILLEVISION`
 folder.
@@ -11,7 +11,7 @@ folder.
 
 Sciobraille combines three product areas:
 
-1. **Live Braille Scanner**: point the phone camera at physical, handwritten, or embossed Braille to receive live English text output.
+1. **Offline Braille Scanner**: capture physical, handwritten, or embossed Braille and receive English text from the bundled V2 TFLite model.
 2. **BrailleEye LMS**: an audio-first, accessible Braille learning path with local progress, milestones, and school-ready reporting contracts.
 3. **Accessible Braille Tools**: Grade 1 text-to-Braille conversion, visual cells, tactile and haptic reading, printed-page OCR, translation, Smart Assist, and learner profiles.
 
@@ -22,46 +22,43 @@ The scanner remains usable for every account. The LMS is designed for learners, 
 - `backend/` - FastAPI scanner service using `model/best.pt`.
 - `android/` - minimal native Android/Kotlin app.
 
-## Backend
+## Optional Development Backend
 
 ```powershell
 cd backend
 python scanner_api.py
 ```
 
-The backend exposes:
+The backend is retained for model engineering and `v2Test` builds. The Play release does not require or call it. It exposes:
 
 - `GET /api/health`
 - `POST /api/scan-frame`
 - `WS /ws/scan`
 - `POST /api/translate`
 
-Each captured frame is horizontally mirrored inside Sciobraille immediately
-before model inference. No public image-flipping website receives camera data.
-Detection boxes are mapped back to the natural camera-preview coordinates
-after text reconstruction.
+The Android scanner always evaluates a horizontally mirrored frame locally. It
+also evaluates natural orientation and selects it only when its confidence and
+text structure clearly beat the mirrored result. No public image-flipping site
+or Sciobraille server receives camera data.
 
-Final V2 backend inference uses confidence `0.25`, model NMS IoU `0.45`,
-class-agnostic duplicate IoU `0.70`, bilateral preprocessing, and no TTA. A
-Scan tap captures one frame immediately and sends it to the configured backend.
-The UI shows `Scanning` while the backend model runs, then locks one final
-result and stops automatically. If the backend cannot be reached, the app shows
-a connection error instead of substituting an offline-model result. Tap Scan
-again to capture a new result.
+Final V2 mobile inference uses confidence `0.25`, class-agnostic duplicate IoU
+`0.70`, 640x640 letterbox preprocessing, and the canonical `a-z` class order.
+A Scan tap captures one frame immediately, runs on-device inference, displays
+one final result, and stops automatically. Tap Scan again for a new result.
 
-The compact **Photo** action on the Scanner screen can either capture through
-the existing camera flow or choose an image from the device. Selected images
-are horizontally mirrored before backend inference and use the same backend-only
-recognition with a clear connection error if the backend is unavailable.
+The compact **Photo** action can capture through the camera or choose an image
+from the device. Both paths use the same on-device orientation and recognition
+pipeline.
 
 ## Android
 
-Configure `SCIOBRAILLE_BACKEND_URL` in `android/gradle.properties`.
-Release builds must point to HTTPS. Debug builds allow local HTTP for testing.
+Normal debug and release builds are offline-only. Configure
+`SCIOBRAILLE_V2_BACKEND_URL` only when building the separate `v2Test` engineering
+variant.
 
 ### USB Backend Connection
 
-The USB debug APK connects to `http://127.0.0.1:8000`. With the phone connected
+Only the `v2Test` engineering variant connects to `http://127.0.0.1:8000`. With the phone connected
 and USB debugging authorized, run `android/connect_usb_backend.bat`. It creates
 an ADB reverse tunnel from device port `8000` to the laptop backend on port
 `8088`. Wi-Fi and mobile data are not required. The tunnel must be recreated
@@ -111,13 +108,15 @@ The six-level LMS unlock path remains unchanged. **Today's Practice** uses persi
 
 ### Offline And Sync
 
-Lessons, scores, milestones, and progress are saved locally first. Scanner recognition requires the configured backend. Cloud LMS sync is optional and does not delete local data on failure.
-
-For production sync, configure an HTTPS backend with `SCIOBRAILLE_BACKEND_URL`. Free users keep local progress; cloud sync is a premium capability.
+Lessons, scores, milestones, certificates, and progress are stored locally in
+Room. Scanner recognition also runs locally. Cloud LMS synchronization is
+disabled in version 1.2.0.
 
 ### Premium And School Readiness
 
-Free access includes the scanner, Dot Explorer, letters A-E, one recognition practice session, and local progress. Premium or school accounts unlock the full curriculum, scanner learning explanations, cloud sync, reports, and school dashboard support.
+The complete local curriculum is unlocked in version 1.2.0. The account,
+premium, school dashboard, and report contracts remain future architecture and
+are not enabled in the Play release.
 
 No payment, school-code verification, or authentication provider is implemented yet. School codes are retained only for later verified activation. The backend has database and API foundations for schools, teachers, students, classes, analytics, and CSV reports. **Do not expose the prototype LMS API publicly:** its authentication dependency currently accepts every request. Production deployment must add real authentication and authorization.
 
@@ -127,8 +126,8 @@ LMS controls use text labels, TalkBack descriptions, TTS, optional haptics, and 
 
 ## Verified Artifacts
 
-- Debug APK: `releases/Sciobraille-Final.apk`
-- Release AAB: not generated in this pass because local Play upload signing is not configured.
+- Debug APK: `releases/Sciobraille-1.2.0-offline-debug.apk`
+- Signed release AAB: `releases/Sciobraille-1.2.0-play.aab`.
 
 The release manifest uses `android:usesCleartextTraffic="false"`.
 
@@ -136,25 +135,30 @@ The release manifest uses `android:usesCleartextTraffic="false"`.
 
 Current integrated verification:
 
-- Android unit tests: 23 passed.
+- Android unit tests: 37 passed.
 - Backend tests: 31 passed.
 - Debug APK build: passed.
-- Scanner inference code and selected V2 model were not changed by the tools/LMS integration.
+- Signed Play AAB build and signature verification: passed.
+- Release lint: zero errors.
+- V2 model bytes and class ordering remain unchanged.
 
-Known image:
-`C:\Users\devaj\Downloads\test sciobraille.jpeg`
-
-Verified raw scanner output:
+Desktop TFLite smoke checks use the same flip/orientation, confidence, NMS, and
+text reconstruction rules as Android. Representative raw outputs include:
 
 ```text
-jaihind
+SSN INVENTE NOT FLIPPED.jpeg -> ssn invente
+
+test sciobraille.jpeg ->
+jaihf d
 india
 sciobraille
-isually impaired
-great project
+visually impaired
+greaq project
 ```
 
-Verified corrected display output restores `visually impaired`. Benchmark accuracy always uses the raw output above.
+`Sri Sairam  noramal.jpeg` currently reads `iram`, and `DMI.jpeg` has no
+detections. These are model-accuracy limitations, not transport failures; the
+Play listing must not claim perfect recognition.
 
 Backend verification:
 
@@ -166,9 +170,8 @@ Backend verification:
 
 ## Before Play Upload
 
-- Replace `SCIOBRAILLE_BACKEND_URL` with the real HTTPS backend URL.
-- Sign the release through the Play upload/signing workflow.
-- Publish a privacy policy covering camera frames sent to the backend.
+- Publish `docs/privacy-policy.html` using GitHub Pages and use its URL in Play Console.
+- Upload `releases/Sciobraille-1.2.0-play.aab` to Play internal testing.
 
 Production notes:
 

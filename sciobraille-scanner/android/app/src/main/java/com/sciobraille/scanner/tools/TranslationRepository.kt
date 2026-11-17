@@ -26,7 +26,8 @@ enum class TranslationSource { BACKEND, LOCAL }
 class TranslationRepository(
     private val httpClient: OkHttpClient,
     private val backendUrl: String,
-    private val localFallback: MlKitTranslationFallback? = null
+    private val localFallback: MlKitTranslationFallback? = null,
+    private val allowBackend: Boolean = true
 ) {
     suspend fun translate(
         text: String,
@@ -38,6 +39,10 @@ class TranslationRepository(
         if (sourceLanguage != AppLanguage.ENGLISH) return@withContext TranslationResult.UnsupportedLanguage
         if (targetLanguage == AppLanguage.ENGLISH) {
             return@withContext TranslationResult.Success(source, source, targetLanguage, TranslationSource.LOCAL)
+        }
+        if (!allowBackend) {
+            return@withContext localFallback?.translate(source, targetLanguage)
+                ?: TranslationResult.OfflineUnavailable
         }
         val body = requestJson(source, targetLanguage).toRequestBody(JSON_MEDIA_TYPE)
         val request = Request.Builder()

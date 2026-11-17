@@ -1,36 +1,23 @@
-# Sciobraille Privacy Policy Draft
+# Sciobraille Privacy Policy Source
 
-Sciobraille helps users read physical Braille by scanning camera frames and
-returning recognized English text.
+Effective date: 17 November 2026
 
-## Data We Process
+The publishable policy is maintained at `../../docs/privacy-policy.html` and is
+linked inside the Android About screen. Version 1.2.0 is offline-first:
 
-- Camera frames: used to detect and translate Braille.
-- Recognition output: the English text returned by the scanner.
-- Basic technical logs: backend health, error, and performance logs.
+- Braille recognition runs with the bundled V2 TFLite model.
+- Camera frames and selected Braille images are not uploaded to Sciobraille.
+- Temporary scanner images are deleted after processing.
+- Scan history, learner profile, LMS progress, scores, streaks, milestones,
+  settings, and certificates remain on the device.
+- No Sciobraille account, advertising SDK, analytics SDK, or cloud sync is
+  enabled.
+- Android TTS runs through the device speech engine.
+- Google ML Kit may download a translation model when the user selects a new
+  language; the downloaded model can then run offline.
+- Android sharing sends selected text only to the app chosen by the user.
 
-## How Data Is Used
+Support contact: `devajoel8@gmail.com`
 
-Camera frames are sent to the Sciobraille scanner backend only to perform
-Braille recognition. The app does not require an account for version 1.
-
-## Data Sharing
-
-Sciobraille does not sell personal data. Camera frames should not be shared with
-third parties except infrastructure providers needed to host and operate the
-scanner backend.
-
-## Retention
-
-For version 1, configure the backend to process frames transiently. Avoid storing
-camera frames unless a user explicitly opts into diagnostics in a future release.
-
-## Permissions
-
-- Camera: required to scan Braille pages.
-- Internet: required to send frames to the scanner backend.
-- Text-to-speech: recognized text can be spoken locally on the device.
-
-## Contact
-
-Replace this section with the production support email before publishing.
+Expected public URL after enabling GitHub Pages from `/docs`:
+`https://joeldeva.github.io/SCIO-FINAL/privacy-policy.html`

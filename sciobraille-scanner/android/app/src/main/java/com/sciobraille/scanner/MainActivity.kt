@@ -47,7 +47,6 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
@@ -120,7 +119,6 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
-private const val CAMERA_PERMISSION_REQUEST = 42
 private const val MAX_IN_FLIGHT_FRAMES = 2
 private const val SOCKET_RESPONSE_TIMEOUT_MS = 5_000L
 private const val FALLBACK_IMAGE_SIZE = 640
@@ -243,11 +241,19 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private val lmsRepository by lazy { LmsRepository.getInstance(this) }
     private val lmsAudioManager by lazy { LmsAudioManager { textToSpeech.takeIf { isTtsReady } } }
     private val lmsHapticManager by lazy { LmsHapticManager(this) }
-    private val entitlementManager by lazy { EntitlementManager(this) }
+    private val offlineBrailleDetector by lazy { OfflineBrailleDetector(this) }
+    private val entitlementManager by lazy {
+        EntitlementManager(this, gatingEnabled = BuildConfig.PREMIUM_GATING_ENABLED)
+    }
     private val learnerProfileStore by lazy { LearnerProfileStore(this) }
     private val accessibilityPreferencesStore by lazy { AccessibilityPreferencesStore(this) }
     private val translationRepository by lazy {
-        TranslationRepository(httpClient, BuildConfig.SCIOBRAILLE_BACKEND_URL, MlKitTranslationFallback())
+        TranslationRepository(
+            httpClient,
+            BuildConfig.SCIOBRAILLE_BACKEND_URL,
+            MlKitTranslationFallback(),
+            allowBackend = !BuildConfig.SCANNER_OFFLINE_ONLY
+        )
     }
     private val multilingualTtsManager by lazy {
         MultilingualTtsManager { textToSpeech.takeIf { isTtsReady } }
@@ -261,7 +267,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             httpClient,
             BuildConfig.SCIOBRAILLE_BACKEND_URL,
             lmsSyncUserId(),
-            canCloudSync = { entitlementManager.canUseCloudSync() }
+            canCloudSync = { BuildConfig.CLOUD_SYNC_ENABLED && entitlementManager.canUseCloudSync() }
         )
     }
 
@@ -326,20 +332,33 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         if (command.isNotBlank()) handleSmartAssistCommand(command)
     }
 
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startCamera()
+        } else if (::frameOverlay.isInitialized) {
+            frameOverlay.setStatus("Camera permission denied. Enable it in Android settings to scan Braille.", false)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         textToSpeech = TextToSpeech(this, this)
         loadHistory()
         setContentView(buildUi())
 
+        if (BuildConfig.SCANNER_OFFLINE_ONLY) {
+            networkExecutor.execute {
+                runCatching { offlineBrailleDetector.warmUp() }
+                    .onFailure { android.util.Log.e("SciobrailleOffline", "Model warm-up failed", it) }
+            }
+        }
+
         if (hasCameraPermission()) {
             startCamera()
         } else {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.CAMERA),
-                CAMERA_PERMISSION_REQUEST
-            )
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -466,7 +485,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         })
 
         statsText = TextView(this).apply {
-            text = "Backend required / Ready"
+            text = "On-device model / Ready"
             setTextColor(ScioColors.MUTED)
             textSize = 14f
             typeface = Typeface.MONOSPACE
@@ -752,16 +771,27 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         body.addView(statRow, LinearLayout.LayoutParams(-1, -2))
         body.addView(infoCard("How it works", listOf(
             "1  Point your phone camera at physical Braille.",
-            "2  Live detection highlights each Braille cell.",
+            "2  Tap Scan to capture one frame and recognize it on this device.",
             "3  Read, copy, share, or listen to the English output."
         )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28) })
         body.addView(infoCard("Key features", listOf(
-            "V2 backend Braille scanner",
+            "V2 on-device Braille scanner",
             "Braille Studio with visual and haptic playback",
             "Offline printed-page Story Reader",
             "Audio-first LMS, tactile practice, progress, and certificates",
             "Smart Assist voice commands and multilingual translation"
         )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
+        body.addView(infoCard("Privacy", listOf(
+            "Braille recognition runs on this device. Camera images are not uploaded by this release.",
+            "Scan history, learner profile, and lesson progress stay on this device unless you explicitly share them."
+        )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
+        body.addView(actionButton("Open Privacy Policy", false) {
+            runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.PRIVACY_POLICY_URL)))
+            }.onFailure { toast("Privacy policy could not be opened") }
+        }.apply {
+            contentDescription = "Open Sciobraille privacy policy in browser"
+        }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
         return scroll
     }
 
@@ -833,7 +863,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             runCatching {
                 withContext(Dispatchers.IO) {
                     lmsRepository.seedDefaultCurriculumIfNeeded()
-                    syncManager.syncAll()
+                    if (BuildConfig.CLOUD_SYNC_ENABLED) syncManager.syncAll()
                     val lessons = lmsRepository.getAllLessons()
                     val progress = lmsRepository.getAllProgress()
                     lessons to progress
@@ -1287,7 +1317,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             contentDescription = "Story Reader recognized text"
         }
         storyStatusView = TextView(this).apply {
-            text = "OCR runs on this device. Translation requires the configured backend."
+            text = "OCR runs on this device. Downloaded translation languages also work offline."
             textSize = 14f
             setTextColor(ScioColors.MUTED)
             setPadding(0, dp(10), 0, dp(12))
@@ -1660,20 +1690,25 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         ), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
 
         val syncText = syncStatusText(snapshot.syncOverview)
-        learnList.addView(infoCard("Sync status", listOf(syncText)).apply {
-            contentDescription = "Sync status. $syncText"
-        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
-        learnList.addView(actionButton("Sync now", true) {
-            learnStatusText.text = "Syncing progress..."
-            lifecycleScope.launch {
-                val result = withContext(Dispatchers.IO) { syncManager.syncAll() }
-                toast(result.message)
-                renderLmsProgress()
-            }
-        }.apply {
-            isEnabled = snapshot.syncOverview.status != SyncStatus.SYNCING
-            contentDescription = "Sync now. $syncText"
-        }, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(14) })
+        learnList.addView(infoCard(
+            if (BuildConfig.CLOUD_SYNC_ENABLED) "Sync status" else "Offline storage",
+            listOf(syncText)
+        ).apply {
+            contentDescription = "Progress storage. $syncText"
+        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
+        if (BuildConfig.CLOUD_SYNC_ENABLED) {
+            learnList.addView(actionButton("Sync now", true) {
+                learnStatusText.text = "Syncing progress..."
+                lifecycleScope.launch {
+                    val result = withContext(Dispatchers.IO) { syncManager.syncAll() }
+                    toast(result.message)
+                    renderLmsProgress()
+                }
+            }.apply {
+                isEnabled = snapshot.syncOverview.status != SyncStatus.SYNCING
+                contentDescription = "Sync now. $syncText"
+            }, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(14) })
+        }
 
         val currentStreak = snapshot.streak?.currentStreak ?: 0
         val longestStreak = snapshot.streak?.longestStreak ?: 0
@@ -1810,7 +1845,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }, LinearLayout.LayoutParams(-1, dp(10)))
     }
 
-    private fun syncStatusText(overview: SyncOverview): String = when (overview.status) {
+    private fun syncStatusText(overview: SyncOverview): String = if (!BuildConfig.CLOUD_SYNC_ENABLED) {
+        "Progress is saved privately on this device and remains available without internet."
+    } else when (overview.status) {
         SyncStatus.SYNCED -> "Synced${overview.lastSyncedAt?.let { ". Last synced: ${formatSyncDateTime(it)}" }.orEmpty()}"
         SyncStatus.SYNCING -> "Syncing"
         SyncStatus.FAILED -> "Sync failed. Try again."
@@ -1835,7 +1872,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         lifecycleScope.launch {
             val awards = withContext(Dispatchers.IO) {
                 val newAwards = milestoneManager.evaluateAndAward()
-                syncManager.syncAll()
+                if (BuildConfig.CLOUD_SYNC_ENABLED) syncManager.syncAll()
                 newAwards
             }
             if (awards.isNotEmpty() && currentTab == AppTab.LEARN) {
@@ -4052,11 +4089,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun startScanning() {
         if (!hasCameraPermission()) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.CAMERA),
-                CAMERA_PERMISSION_REQUEST
-            )
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             return
         }
         if (imageCapture == null) {
@@ -4205,7 +4238,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         networkExecutor.execute {
             try {
-                val payload = scanUploadedImageOnline(frameFile)
+                val payload = scanBrailleFrame(frameFile)
                 runOnUiThread {
                     if (isScanning) completeScan(payload)
                 }
@@ -4241,6 +4274,13 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun scanBrailleFrame(frameFile: File): ScannerPayload =
+        if (BuildConfig.SCANNER_OFFLINE_ONLY) {
+            offlineBrailleDetector.detect(frameFile)
+        } else {
+            scanUploadedImageOnline(frameFile)
+        }
+
     private fun captureAndScan() {
         val capture = imageCapture ?: return
         if (isFrameInFlight) return
@@ -4256,7 +4296,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                     networkExecutor.execute {
                         try {
-                            val payload = scanUploadedImageOnline(frameFile)
+                            val payload = scanBrailleFrame(frameFile)
                             runOnUiThread {
                                 if (isScanning) {
                                     completeScan(payload)
@@ -4287,6 +4327,16 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun completeScan(payload: ScannerPayload) {
         if (!isScanning) return
+        if (!payload.ok) {
+            finishScanError(
+                if (BuildConfig.SCANNER_OFFLINE_ONLY) {
+                    "The on-device model could not process this image. Try another photo."
+                } else {
+                    "The scanner could not process this image. Try again."
+                }
+            )
+            return
+        }
         val finalText = payload.rawText.ifBlank { payload.text }.trim()
         val finalPayload = payload.copy(
             text = finalText,
@@ -4307,7 +4357,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         renderPayload(finalPayload)
         if (currentTab == AppTab.SCANNER) {
             val confidencePercent = (finalPayload.confidence * 100).roundToInt()
-            statsText.text = "${finalPayload.detections} cells / $confidencePercent% / Backend model"
+            val modelLabel = if (finalPayload.sourceMode == "offline") "On-device model" else "Backend model"
+            statsText.text = "${finalPayload.detections} cells / $confidencePercent% / $modelLabel"
             frameOverlay.setStatus(
                 if (finalText.isBlank()) "No Braille found. Tap Scan to try again." else "Result ready",
                 false
@@ -4331,7 +4382,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun backendUnavailableMessage(): String =
-        "Backend unavailable. Keep the laptop backend running and reconnect USB with CONNECT_PHONE_USB.bat."
+        if (BuildConfig.SCANNER_OFFLINE_ONLY) {
+            "The on-device scanner could not run. Restart the app and try again."
+        } else {
+            "Backend unavailable. Keep the laptop backend running and reconnect USB with CONNECT_PHONE_USB.bat."
+        }
 
     private fun renderPayload(payload: ScannerPayload) {
         if (!payload.ok) {
@@ -4624,21 +4679,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             PackageManager.PERMISSION_GRANTED
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == CAMERA_PERMISSION_REQUEST &&
-            grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
-        ) {
-            startCamera()
-        } else {
-            frameOverlay.setStatus("Camera permission denied", false)
-        }
-    }
-
     override fun onDestroy() {
         stopScanning("Stopped")
         stopBraillePlayback()
@@ -4652,6 +4692,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         pendingStoryPhotoFile = null
         pendingBraillePhotoFile?.delete()
         pendingBraillePhotoFile = null
+        runCatching { offlineBrailleDetector.closeIfOpened() }
         runCatching { storyTextRecognizer.close() }
         super.onDestroy()
     }
@@ -5007,6 +5048,19 @@ internal object BrailleOrientationSelector {
                 word.substring(index, index + 2) in commonEnglishBigrams
             }
         }
+
+    fun quality(text: String, detections: Int, confidence: Double): Double =
+        score(text) * 2.0 + confidence.coerceIn(0.0, 1.0) * 10.0 + detections.coerceIn(0, 80) * 0.05
+
+    fun preferAlternate(
+        primaryText: String,
+        primaryDetections: Int,
+        primaryConfidence: Double,
+        alternateText: String,
+        alternateDetections: Int,
+        alternateConfidence: Double
+    ): Boolean = quality(alternateText, alternateDetections, alternateConfidence) >
+        quality(primaryText, primaryDetections, primaryConfidence) + 0.25
 }
 
 private data class OfflineCandidate(
@@ -5223,15 +5277,30 @@ class OfflineBrailleDetector(private val context: Context) {
             }
         }
 
+    fun warmUp() {
+        interpreter.getInputTensor(0)
+        interpreter.getOutputTensor(0)
+    }
+
     fun detect(frameFile: File): ScannerPayload {
         val bitmap = BitmapFactory.decodeFile(frameFile.absolutePath)
             ?: return ScannerPayload(false, "", false, 0, 0.0, emptyList())
         // Match the production backend: the captured frame is mirrored before inference.
         // inferCandidate maps boxes back to the natural camera-preview coordinates.
-        val selected = inferCandidate(
+        val mirrored = inferCandidate(
             bitmap,
             mirroredInput = ScannerInputPolicy.FORCE_HORIZONTAL_FLIP
         )
+        val natural = inferCandidate(bitmap, mirroredInput = false)
+        val selected = if (BrailleOrientationSelector.preferAlternate(
+                primaryText = mirrored.rawText,
+                primaryDetections = mirrored.modelBoxes.size,
+                primaryConfidence = mirrored.confidence,
+                alternateText = natural.rawText,
+                alternateDetections = natural.modelBoxes.size,
+                alternateConfidence = natural.confidence
+            )
+        ) natural else mirrored
         bitmap.recycle()
         android.util.Log.d(
             "SciobrailleOffline",
@@ -5246,7 +5315,9 @@ class OfflineBrailleDetector(private val context: Context) {
             confidence = selected.confidence,
             boxes = selected.displayBoxes,
             rawText = selected.rawText,
-            correctedText = selected.rawText
+            correctedText = selected.rawText,
+            sourceMode = "offline",
+            inputFlippedHorizontal = selected.mirrored
         )
     }
 
