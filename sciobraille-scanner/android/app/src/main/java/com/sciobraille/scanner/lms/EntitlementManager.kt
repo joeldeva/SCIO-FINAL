@@ -11,14 +11,17 @@ enum class AccountType {
 }
 
 /** Local entitlement boundary until billing and school-code verification are connected. */
-class EntitlementManager(context: Context) {
+class EntitlementManager(
+    context: Context,
+    private val gatingEnabled: Boolean = true
+) {
     private val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
 
     fun accountType(): AccountType = runCatching {
         AccountType.valueOf(preferences.getString(KEY_ACCOUNT_TYPE, AccountType.FREE.name).orEmpty())
     }.getOrDefault(AccountType.FREE)
 
-    fun hasFullLearningAccess(): Boolean = accountType() != AccountType.FREE
+    fun hasFullLearningAccess(): Boolean = !gatingEnabled || accountType() != AccountType.FREE
 
     fun canAccessLetter(letter: Char): Boolean = hasFullLearningAccess() || letter.uppercaseChar() in 'A'..'E'
 

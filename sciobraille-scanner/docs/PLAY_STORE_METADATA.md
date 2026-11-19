@@ -6,25 +6,32 @@ Sciobraille
 
 ## Short Description
 
-Scan physical Braille and learn Braille with audio-first lessons.
+Scan physical Braille offline and learn with audio-first lessons.
 
 ## Full Description
 
 Sciobraille helps learners and readers work with physical Braille. Point the
-camera at embossed or handwritten Braille to receive English text output, then
+camera at embossed or handwritten Braille, tap Scan, and receive English text
+from the on-device model. Then
 use BrailleEye LMS to practice dot positions, letters, words, contractions, and
 real-world scan practice.
 
 Key features:
 
-- Live physical Braille scanner.
+- Offline physical Braille scanner with camera and gallery input.
+- Automatic front/reverse-side recognition with saved recognition options.
+- Capture guidance, result recommendations, plain text, Unicode Braille, and
+  annotated detection images.
 - Audio-first Dot Explorer for the six Braille dot positions.
 - Grade 1 English Braille letter lessons from A to Z.
 - Letter recognition and word reading practice.
 - Grade 2 contraction learning foundation.
 - Scan and Learn mode for real-world Braille practice.
 - Local offline progress, streaks, milestones, and certificates.
-- School-ready reporting and dashboard API foundation.
+- Private on-device scan history and learning progress.
+- Optional, consent-based model-improvement contribution packages with separate
+  private-training and public-dataset choices. Scans are never uploaded
+  automatically.
 
 Sciobraille is designed with accessibility in mind: large controls, TalkBack
 labels, spoken instructions, optional haptics, and local-first progress.
@@ -35,24 +42,17 @@ Education
 
 ## Content Rating Notes
 
-Educational app. No user-generated public content. Camera is used for Braille
-scanning.
+Educational app. No public social feed or public user-generated content. Camera
+is used for Braille scanning. A user may optionally share one reviewed Braille
+sample with the project for model improvement after explicit consent.
 
-## Support Contact Placeholder
+## Support Contact
 
-Replace before Play upload:
+`devajoel8@gmail.com`
 
-```text
-support@sciobraille.example
-```
+## Privacy Policy URL
 
-## Privacy Policy URL Placeholder
-
-Replace before Play upload:
-
-```text
-https://sciobraille.example/privacy
-```
+`https://joeldeva.github.io/SCIO-FINAL/privacy-policy.html`
 
 ## Screenshot Plan
 

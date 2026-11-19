@@ -53,12 +53,7 @@ class LmsHapticManager(
         runCatching {
             val vibrator = vibrator() ?: return
             if (!vibrator.hasVibrator()) return
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(pattern, -1)
-            }
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
         }
     }
 

@@ -35,10 +35,13 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -47,7 +50,6 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
@@ -120,7 +122,6 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
-private const val CAMERA_PERMISSION_REQUEST = 42
 private const val MAX_IN_FLIGHT_FRAMES = 2
 private const val SOCKET_RESPONSE_TIMEOUT_MS = 5_000L
 private const val FALLBACK_IMAGE_SIZE = 640
@@ -162,7 +163,7 @@ internal object ScannerInputPolicy {
         "/ws/scan?flip_horizontal=false"
     }
 
-    fun uploadPath(): String = if (FORCE_HORIZONTAL_FLIP) {
+    fun uploadPath(flipHorizontal: Boolean = FORCE_HORIZONTAL_FLIP): String = if (flipHorizontal) {
         "/api/scan-frame?flip_horizontal=true"
     } else {
         "/api/scan-frame?flip_horizontal=false"
@@ -181,6 +182,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private lateinit var outputText: TextView
     private lateinit var braillePreviewText: TextView
     private lateinit var statsText: TextView
+    private lateinit var scanAdviceText: TextView
     private lateinit var scanButton: Button
     private lateinit var flashButton: Button
     private lateinit var progress: ProgressBar
@@ -189,6 +191,10 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private lateinit var translatedOutputText: TextView
     private lateinit var translateButton: Button
     private lateinit var speakTranslationButton: Button
+    private lateinit var contributeSampleButton: Button
+    private lateinit var shareAnnotatedButton: Button
+    private lateinit var annotatedResultImage: ImageView
+    private lateinit var recognitionSummaryText: TextView
     private lateinit var historyList: LinearLayout
     private lateinit var learnTitleText: TextView
     private lateinit var learnSubtitleText: TextView
@@ -243,11 +249,21 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private val lmsRepository by lazy { LmsRepository.getInstance(this) }
     private val lmsAudioManager by lazy { LmsAudioManager { textToSpeech.takeIf { isTtsReady } } }
     private val lmsHapticManager by lazy { LmsHapticManager(this) }
-    private val entitlementManager by lazy { EntitlementManager(this) }
+    private val offlineBrailleDetector by lazy { OfflineBrailleDetector(this) }
+    private val trainingContributionManager by lazy { TrainingContributionManager(this) }
+    private val recognitionPreferencesStore by lazy { RecognitionPreferencesStore(this) }
+    private val entitlementManager by lazy {
+        EntitlementManager(this, gatingEnabled = BuildConfig.PREMIUM_GATING_ENABLED)
+    }
     private val learnerProfileStore by lazy { LearnerProfileStore(this) }
     private val accessibilityPreferencesStore by lazy { AccessibilityPreferencesStore(this) }
     private val translationRepository by lazy {
-        TranslationRepository(httpClient, BuildConfig.SCIOBRAILLE_BACKEND_URL, MlKitTranslationFallback())
+        TranslationRepository(
+            httpClient,
+            BuildConfig.SCIOBRAILLE_BACKEND_URL,
+            MlKitTranslationFallback(),
+            allowBackend = !BuildConfig.SCANNER_OFFLINE_ONLY
+        )
     }
     private val multilingualTtsManager by lazy {
         MultilingualTtsManager { textToSpeech.takeIf { isTtsReady } }
@@ -261,7 +277,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             httpClient,
             BuildConfig.SCIOBRAILLE_BACKEND_URL,
             lmsSyncUserId(),
-            canCloudSync = { entitlementManager.canUseCloudSync() }
+            canCloudSync = { BuildConfig.CLOUD_SYNC_ENABLED && entitlementManager.canUseCloudSync() }
         )
     }
 
@@ -297,7 +313,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     private val brailleImagePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) scanSelectedBrailleImage(uri)
     }
@@ -326,20 +342,33 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         if (command.isNotBlank()) handleSmartAssistCommand(command)
     }
 
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startCamera()
+        } else if (::frameOverlay.isInitialized) {
+            frameOverlay.setStatus("Camera permission denied. Enable it in Android settings to scan Braille.", false)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         textToSpeech = TextToSpeech(this, this)
         loadHistory()
         setContentView(buildUi())
 
+        if (BuildConfig.SCANNER_OFFLINE_ONLY) {
+            networkExecutor.execute {
+                runCatching { offlineBrailleDetector.warmUp() }
+                    .onFailure { android.util.Log.e("SciobrailleOffline", "Model warm-up failed", it) }
+            }
+        }
+
         if (hasCameraPermission()) {
             startCamera()
         } else {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.CAMERA),
-                CAMERA_PERMISSION_REQUEST
-            )
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -433,10 +462,29 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         chips.addView(chip("Grade 1"), LinearLayout.LayoutParams(0, dp(52), 1f))
         body.addView(chips)
 
-        body.addView(actionButton("Photo", false) { showPhotoScanOptions() }.apply {
-            contentDescription = "Photo scan. Capture Braille now or choose a Braille image from this device."
-        }, LinearLayout.LayoutParams(dp(112), dp(44)).apply {
-            gravity = Gravity.END
+        recognitionSummaryText = TextView(this).apply {
+            text = recognitionPreferencesSummary()
+            textSize = 14f
+            setTextColor(ScioColors.MUTED)
+            setPadding(dp(4), dp(10), dp(4), 0)
+            contentDescription = "Recognition defaults. ${recognitionPreferencesSummary()}"
+        }
+        body.addView(recognitionSummaryText)
+
+        val scannerTools = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        scannerTools.addView(actionButton("Photo tips", false) { showPhotoGuidanceDialog() }.apply {
+            contentDescription = "Photo tips. Learn how to photograph embossed Braille clearly."
+        }, LinearLayout.LayoutParams(0, dp(52), 1f))
+        scannerTools.addView(actionButton("Options", false) { showRecognitionOptionsDialog() }.apply {
+            contentDescription = "Recognition options. Choose automatic, front-side, or reverse-side Braille."
+        }, LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginStart = dp(10) })
+        scannerTools.addView(actionButton("Photo", false) { showPhotoScanOptions() }.apply {
+            contentDescription = "Photo scan. Capture Braille now or choose one Braille image from this device."
+        }, LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginStart = dp(10) })
+        body.addView(scannerTools, LinearLayout.LayoutParams(-1, -2).apply {
             topMargin = dp(10)
         })
 
@@ -466,7 +514,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         })
 
         statsText = TextView(this).apply {
-            text = "Backend required / Ready"
+            text = "On-device model / Ready"
             setTextColor(ScioColors.MUTED)
             textSize = 14f
             typeface = Typeface.MONOSPACE
@@ -477,6 +525,15 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         body.addView(statsText, LinearLayout.LayoutParams(-1, dp(48)).apply {
             topMargin = dp(16)
         })
+        scanAdviceText = TextView(this).apply {
+            text = "Tip: keep the page flat, fill the frame, and use light from the side."
+            textSize = 14f
+            setTextColor(ScioColors.MUTED)
+            setPadding(dp(8), dp(10), dp(8), 0)
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+            contentDescription = text
+        }
+        body.addView(scanAdviceText)
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -536,6 +593,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         resultCard.addView(braillePreviewText)
         resultCard.addView(outputText)
 
+        val brailleActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        brailleActions.addView(actionButton("Copy Braille", false) {
+            copyText(braillePreviewText.text.toString())
+        }, LinearLayout.LayoutParams(0, dp(52), 1f))
+        brailleActions.addView(actionButton("Share Braille", false) {
+            shareText(braillePreviewText.text.toString())
+        }, LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginStart = dp(10) })
+        resultCard.addView(brailleActions, LinearLayout.LayoutParams(-1, -2).apply {
+            bottomMargin = dp(10)
+        })
+
         val resultActions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
         }
@@ -545,6 +613,49 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         resultActions.addView(SpaceView(this), LinearLayout.LayoutParams(dp(12), 1))
         resultActions.addView(actionButton("Share", false) { shareOutput() }, LinearLayout.LayoutParams(0, dp(56), 1f))
         resultCard.addView(resultActions)
+
+        resultCard.addView(TextView(this).apply {
+            text = "Detected cells"
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(ScioColors.SECONDARY)
+            setPadding(0, dp(18), 0, dp(8))
+        })
+        annotatedResultImage = ImageView(this).apply {
+            visibility = View.GONE
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            background = rounded(ScioColors.SURFACE, ScioColors.OUTLINE, 1, 6)
+            contentDescription = "Annotated Braille image with recognized letter labels and detection boxes"
+        }
+        resultCard.addView(annotatedResultImage, LinearLayout.LayoutParams(-1, -2))
+        shareAnnotatedButton = actionButton("Share detection image", false) {
+            shareAnnotatedResult()
+        }.apply {
+            isEnabled = false
+            alpha = 0.55f
+            contentDescription = "Share the annotated Braille detection image"
+        }
+        resultCard.addView(shareAnnotatedButton, LinearLayout.LayoutParams(-1, dp(52)).apply {
+            topMargin = dp(8)
+        })
+
+        contributeSampleButton = actionButton("Improve the model", false) {
+            showTrainingContributionDialog()
+        }.apply {
+            isEnabled = false
+            alpha = 0.55f
+            contentDescription = "Improve the Sciobraille model with this scan. Optional contribution."
+        }
+        resultCard.addView(contributeSampleButton, LinearLayout.LayoutParams(-1, dp(54)).apply {
+            topMargin = dp(12)
+        })
+        resultCard.addView(TextView(this).apply {
+            text = "Optional: review and share one scan for future model improvement. Nothing is uploaded automatically."
+            textSize = 13f
+            setTextColor(ScioColors.SECONDARY)
+            setPadding(0, dp(8), 0, 0)
+        })
 
         resultCard.addView(TextView(this).apply {
             text = "Translate & Speak"
@@ -751,17 +862,43 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         statRow.addView(statCard("6", "LMS Levels"), LinearLayout.LayoutParams(0, dp(112), 1f))
         body.addView(statRow, LinearLayout.LayoutParams(-1, -2))
         body.addView(infoCard("How it works", listOf(
-            "1  Point your phone camera at physical Braille.",
-            "2  Live detection highlights each Braille cell.",
-            "3  Read, copy, share, or listen to the English output."
+            "1  Place the page flat and use side lighting so raised dots cast clear shadows.",
+            "2  Hold the phone above the page, keep every Braille line visible, and tap Scan or Photo.",
+            "3  Automatic side detection checks front-side and reverse-side Braille on this device.",
+            "4  Read, listen, copy, or share plain text, Unicode Braille, and the annotated detection image."
         )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28) })
+        val helpActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        helpActions.addView(actionButton("Photo tips", false) { showPhotoGuidanceDialog() }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        helpActions.addView(actionButton("Recognition options", false) { showRecognitionOptionsDialog() }, LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+            marginStart = dp(10)
+        })
+        body.addView(helpActions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        body.addView(infoCard("Who Sciobraille is for", listOf(
+            "Blind and low-vision learners using audio-first reading and lessons",
+            "Teachers working with blind students",
+            "Parents, relatives, and accessibility support workers",
+            "Anyone who needs to read or learn physical English Braille"
+        )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
         body.addView(infoCard("Key features", listOf(
-            "V2 backend Braille scanner",
+            "V2 on-device Braille scanner",
             "Braille Studio with visual and haptic playback",
             "Offline printed-page Story Reader",
             "Audio-first LMS, tactile practice, progress, and certificates",
             "Smart Assist voice commands and multilingual translation"
         )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
+        body.addView(infoCard("Privacy", listOf(
+            "Braille recognition runs on this device. Camera images are never uploaded automatically.",
+            "Scan history, learner profile, and lesson progress stay on this device unless you explicitly share them.",
+            "No registration is required for scanning, learning, history, or sharing.",
+            "Improve the model offers separate private-training and public-dataset choices. Public release is never selected by default."
+        )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
+        body.addView(actionButton("Open Privacy Policy", false) {
+            runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.PRIVACY_POLICY_URL)))
+            }.onFailure { toast("Privacy policy could not be opened") }
+        }.apply {
+            contentDescription = "Open Sciobraille privacy policy in browser"
+        }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
         return scroll
     }
 
@@ -775,7 +912,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         scannerNav = navItem("Scanner", "Scanner tab") { showTab(AppTab.SCANNER) }
         historyNav = navItem("History", "History tab") { showTab(AppTab.HISTORY) }
         learnNav = navItem("Learn", "Learn Braille tab") { showTab(AppTab.LEARN) }
-        aboutNav = navItem("About", "About BrailleEye tab") { showTab(AppTab.ABOUT) }
+        aboutNav = navItem("About", "About Sciobraille tab") { showTab(AppTab.ABOUT) }
         nav.addView(scannerNav, LinearLayout.LayoutParams(0, dp(64), 1f))
         nav.addView(historyNav, LinearLayout.LayoutParams(0, dp(64), 1f))
         nav.addView(learnNav, LinearLayout.LayoutParams(0, dp(64), 1f))
@@ -833,7 +970,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             runCatching {
                 withContext(Dispatchers.IO) {
                     lmsRepository.seedDefaultCurriculumIfNeeded()
-                    syncManager.syncAll()
+                    if (BuildConfig.CLOUD_SYNC_ENABLED) syncManager.syncAll()
                     val lessons = lmsRepository.getAllLessons()
                     val progress = lmsRepository.getAllProgress()
                     lessons to progress
@@ -1287,7 +1424,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             contentDescription = "Story Reader recognized text"
         }
         storyStatusView = TextView(this).apply {
-            text = "OCR runs on this device. Translation requires the configured backend."
+            text = "OCR runs on this device. Downloaded translation languages also work offline."
             textSize = 14f
             setTextColor(ScioColors.MUTED)
             setPadding(0, dp(10), 0, dp(12))
@@ -1660,20 +1797,25 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         ), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
 
         val syncText = syncStatusText(snapshot.syncOverview)
-        learnList.addView(infoCard("Sync status", listOf(syncText)).apply {
-            contentDescription = "Sync status. $syncText"
-        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
-        learnList.addView(actionButton("Sync now", true) {
-            learnStatusText.text = "Syncing progress..."
-            lifecycleScope.launch {
-                val result = withContext(Dispatchers.IO) { syncManager.syncAll() }
-                toast(result.message)
-                renderLmsProgress()
-            }
-        }.apply {
-            isEnabled = snapshot.syncOverview.status != SyncStatus.SYNCING
-            contentDescription = "Sync now. $syncText"
-        }, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(14) })
+        learnList.addView(infoCard(
+            if (BuildConfig.CLOUD_SYNC_ENABLED) "Sync status" else "Offline storage",
+            listOf(syncText)
+        ).apply {
+            contentDescription = "Progress storage. $syncText"
+        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
+        if (BuildConfig.CLOUD_SYNC_ENABLED) {
+            learnList.addView(actionButton("Sync now", true) {
+                learnStatusText.text = "Syncing progress..."
+                lifecycleScope.launch {
+                    val result = withContext(Dispatchers.IO) { syncManager.syncAll() }
+                    toast(result.message)
+                    renderLmsProgress()
+                }
+            }.apply {
+                isEnabled = snapshot.syncOverview.status != SyncStatus.SYNCING
+                contentDescription = "Sync now. $syncText"
+            }, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(14) })
+        }
 
         val currentStreak = snapshot.streak?.currentStreak ?: 0
         val longestStreak = snapshot.streak?.longestStreak ?: 0
@@ -1810,7 +1952,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }, LinearLayout.LayoutParams(-1, dp(10)))
     }
 
-    private fun syncStatusText(overview: SyncOverview): String = when (overview.status) {
+    private fun syncStatusText(overview: SyncOverview): String = if (!BuildConfig.CLOUD_SYNC_ENABLED) {
+        "Progress is saved privately on this device and remains available without internet."
+    } else when (overview.status) {
         SyncStatus.SYNCED -> "Synced${overview.lastSyncedAt?.let { ". Last synced: ${formatSyncDateTime(it)}" }.orEmpty()}"
         SyncStatus.SYNCING -> "Syncing"
         SyncStatus.FAILED -> "Sync failed. Try again."
@@ -1835,7 +1979,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         lifecycleScope.launch {
             val awards = withContext(Dispatchers.IO) {
                 val newAwards = milestoneManager.evaluateAndAward()
-                syncManager.syncAll()
+                if (BuildConfig.CLOUD_SYNC_ENABLED) syncManager.syncAll()
                 newAwards
             }
             if (awards.isNotEmpty() && currentTab == AppTab.LEARN) {
@@ -4052,11 +4196,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun startScanning() {
         if (!hasCameraPermission()) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.CAMERA),
-                CAMERA_PERMISSION_REQUEST
-            )
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             return
         }
         if (imageCapture == null) {
@@ -4064,6 +4204,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             startCamera()
             return
         }
+        clearPendingTrainingContribution()
         isScanning = true
         pendingFrames = 0
         pendingSinceMs = 0L
@@ -4150,13 +4291,142 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         return "$socketBase${ScannerInputPolicy.webSocketPath()}"
     }
 
+    private fun recognitionPreferencesSummary(): String {
+        val preferences = recognitionPreferencesStore.load()
+        return "English Grade 1 / ${preferences.sideMode.displayName} / " +
+            if (preferences.showAnnotatedResult) "Detection image on" else "Detection image off"
+    }
+
+    private fun showRecognitionOptionsDialog() {
+        val current = recognitionPreferencesStore.load()
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), 0)
+        }
+        content.addView(TextView(this).apply {
+            text = "Recognition language: English\nBraille grade: Grade 1"
+            setTextColor(ScioColors.TEXT)
+            textSize = 16f
+            setLineSpacing(0f, 1.25f)
+        })
+        content.addView(TextView(this).apply {
+            text = "Page side"
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(ScioColors.TEXT)
+            textSize = 17f
+            setPadding(0, dp(18), 0, dp(6))
+        })
+        val sideGroup = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+        val sideButtons = ScanSideMode.entries.associateWith { mode ->
+            RadioButton(this).apply {
+                id = View.generateViewId()
+                text = "${mode.displayName}\n${mode.description}"
+                contentDescription = "${mode.displayName}. ${mode.description}"
+                setTextColor(ScioColors.TEXT)
+                textSize = 15f
+                setPadding(0, dp(4), 0, dp(4))
+                isChecked = mode == current.sideMode
+            }.also(sideGroup::addView)
+        }
+        content.addView(sideGroup)
+        val showAnnotated = CheckBox(this).apply {
+            text = "Show an annotated image with letter labels and detection boxes"
+            contentDescription = text
+            isChecked = current.showAnnotatedResult
+            setPadding(0, dp(14), 0, 0)
+        }
+        content.addView(showAnnotated)
+        content.addView(TextView(this).apply {
+            text = "Grade 2 recognition is not enabled because the current model is trained for English letters a to z. Translation remains available after recognition."
+            textSize = 13f
+            setTextColor(ScioColors.MUTED)
+            setPadding(0, dp(14), 0, 0)
+        })
+        val scroll = ScrollView(this).apply { addView(content) }
+        AlertDialog.Builder(this)
+            .setTitle("Recognition options")
+            .setView(scroll)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save defaults") { _, _ ->
+                val selected = sideButtons.entries.firstOrNull { it.value.isChecked }?.key
+                    ?: ScanSideMode.AUTOMATIC
+                recognitionPreferencesStore.save(
+                    RecognitionPreferences(selected, showAnnotated.isChecked)
+                )
+                recognitionSummaryText.text = recognitionPreferencesSummary()
+                recognitionSummaryText.contentDescription =
+                    "Recognition defaults. ${recognitionPreferencesSummary()}"
+                toast("Recognition defaults saved on this device")
+            }
+            .show()
+    }
+
+    private fun showPhotoGuidanceDialog() {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(8))
+        }
+        content.addView(TextView(this).apply {
+            text = "For embossed Braille, side lighting and a sharp, overhead photo make the raised dots easier to recognize."
+            textSize = 16f
+            setTextColor(ScioColors.TEXT)
+            setLineSpacing(0f, 1.25f)
+        })
+        content.addView(guidanceSection("Do", PhotoGuidance.doItems))
+        content.addView(guidanceSection("Avoid", PhotoGuidance.avoidItems))
+        content.addView(TextView(this).apply {
+            text = "If recognition is weak, change Page side in Recognition options and scan again. Automatic checks both sides and selects the stronger reading."
+            textSize = 14f
+            setTextColor(ScioColors.MUTED)
+            setPadding(0, dp(16), 0, 0)
+        })
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("How to photograph Braille")
+            .setView(ScrollView(this).apply { addView(content) })
+            .setNeutralButton("Read aloud", null)
+            .setPositiveButton("Done", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                speakText(PhotoGuidance.spokenSummary)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun guidanceSection(heading: String, items: List<String>): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(18), 0, 0)
+            addView(TextView(context).apply {
+                text = heading
+                textSize = 19f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(ScioColors.TEXT)
+            })
+            items.forEach { item ->
+                addView(TextView(context).apply {
+                    text = "- $item"
+                    textSize = 15f
+                    setTextColor(ScioColors.TEXT)
+                    setLineSpacing(0f, 1.2f)
+                    setPadding(0, dp(8), 0, 0)
+                    contentDescription = item
+                })
+            }
+        }
+
     private fun showPhotoScanOptions() {
         AlertDialog.Builder(this)
             .setTitle("Scan a Braille photo")
-            .setItems(arrayOf("Capture with camera", "Upload from gallery")) { _, which ->
+            .setMessage("Capture a new photo or choose one image. Sciobraille processes it on this device.")
+            .setItems(arrayOf("Capture with camera", "Choose from device", "View photo tips")) { _, which ->
                 when (which) {
                     0 -> launchBrailleCamera()
-                    1 -> brailleImagePickerLauncher.launch("image/*")
+                    1 -> brailleImagePickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                    2 -> showPhotoGuidanceDialog()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -4194,19 +4464,29 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun scanBrailleImageFile(frameFile: File) {
         if (isScanning) stopScanning("Stopped")
+        clearPendingTrainingContribution()
         isScanning = true
         isFrameInFlight = true
         scanButton.text = "Scanning"
         scanButton.isEnabled = false
         progress.visibility = View.VISIBLE
-        statsText.text = "Preparing photo / Flipping / Scanning"
-        frameOverlay.setStatus("Flipping and scanning photo...", true)
+        val sideMode = recognitionPreferencesStore.load().sideMode
+        statsText.text = "Preparing photo / ${sideMode.displayName} / Scanning"
+        frameOverlay.setStatus("Checking ${sideMode.displayName.lowercase()}...", true)
         outputText.text = "Scanning selected Braille image..."
 
         networkExecutor.execute {
             try {
-                val payload = scanUploadedImageOnline(frameFile)
+                val payload = scanBrailleFrame(frameFile)
+                val contributionReady = runCatching {
+                    trainingContributionManager.rememberModelInput(frameFile, payload)
+                }.getOrDefault(false)
+                val annotated = if (contributionReady && recognitionPreferencesStore.load().showAnnotatedResult) {
+                    runCatching { trainingContributionManager.createAnnotatedPreview() }.getOrNull()
+                } else null
                 runOnUiThread {
+                    setContributionAvailable(contributionReady)
+                    setAnnotatedResult(annotated)
                     if (isScanning) completeScan(payload)
                 }
             } catch (_: Exception) {
@@ -4220,7 +4500,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun scanUploadedImageOnline(frameFile: File): ScannerPayload {
+    private fun scanUploadedImageOnline(frameFile: File, flipHorizontal: Boolean): ScannerPayload {
         val imageBytes = frameFile.readBytes()
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
@@ -4231,7 +4511,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             )
             .build()
         val request = Request.Builder()
-            .url(apiUrl(ScannerInputPolicy.uploadPath()))
+            .url(apiUrl(ScannerInputPolicy.uploadPath(flipHorizontal)))
             .post(body)
             .build()
         return httpClient.newCall(request).execute().use { response ->
@@ -4240,6 +4520,25 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             ScannerPayload.fromJsonOrNull(responseBody) ?: error("Invalid scanner response")
         }
     }
+
+    private fun scanBrailleFrame(frameFile: File): ScannerPayload =
+        if (BuildConfig.SCANNER_OFFLINE_ONLY) {
+            offlineBrailleDetector.detect(frameFile, recognitionPreferencesStore.load().sideMode)
+        } else {
+            val candidates = OfflineOrientationPolicy.candidates(recognitionPreferencesStore.load().sideMode)
+                .map { flipHorizontal -> scanUploadedImageOnline(frameFile, flipHorizontal) }
+            candidates.drop(1).fold(candidates.first()) { winner, candidate ->
+                if (BrailleOrientationSelector.preferAlternate(
+                        primaryText = winner.rawText,
+                        primaryDetections = winner.detections,
+                        primaryConfidence = winner.confidence,
+                        alternateText = candidate.rawText,
+                        alternateDetections = candidate.detections,
+                        alternateConfidence = candidate.confidence
+                    )
+                ) candidate else winner
+            }
+        }
 
     private fun captureAndScan() {
         val capture = imageCapture ?: return
@@ -4256,8 +4555,16 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                     networkExecutor.execute {
                         try {
-                            val payload = scanUploadedImageOnline(frameFile)
+                            val payload = scanBrailleFrame(frameFile)
+                            val contributionReady = runCatching {
+                                trainingContributionManager.rememberModelInput(frameFile, payload)
+                            }.getOrDefault(false)
+                            val annotated = if (contributionReady && recognitionPreferencesStore.load().showAnnotatedResult) {
+                                runCatching { trainingContributionManager.createAnnotatedPreview() }.getOrNull()
+                            } else null
                             runOnUiThread {
+                                setContributionAvailable(contributionReady)
+                                setAnnotatedResult(annotated)
                                 if (isScanning) {
                                     completeScan(payload)
                                 }
@@ -4287,6 +4594,16 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun completeScan(payload: ScannerPayload) {
         if (!isScanning) return
+        if (!payload.ok) {
+            finishScanError(
+                if (BuildConfig.SCANNER_OFFLINE_ONLY) {
+                    "The on-device model could not process this image. Try another photo."
+                } else {
+                    "The scanner could not process this image. Try again."
+                }
+            )
+            return
+        }
         val finalText = payload.rawText.ifBlank { payload.text }.trim()
         val finalPayload = payload.copy(
             text = finalText,
@@ -4307,7 +4624,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         renderPayload(finalPayload)
         if (currentTab == AppTab.SCANNER) {
             val confidencePercent = (finalPayload.confidence * 100).roundToInt()
-            statsText.text = "${finalPayload.detections} cells / $confidencePercent% / Backend model"
+            val modelLabel = if (finalPayload.sourceMode == "offline") "On-device model" else "Backend model"
+            statsText.text = "${finalPayload.detections} cells / $confidencePercent% / $modelLabel"
             frameOverlay.setStatus(
                 if (finalText.isBlank()) "No Braille found. Tap Scan to try again." else "Result ready",
                 false
@@ -4331,7 +4649,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun backendUnavailableMessage(): String =
-        "Backend unavailable. Keep the laptop backend running and reconnect USB with CONNECT_PHONE_USB.bat."
+        if (BuildConfig.SCANNER_OFFLINE_ONLY) {
+            "The on-device scanner could not run. Restart the app and try again."
+        } else {
+            "Backend unavailable. Keep the laptop backend running and reconnect USB with CONNECT_PHONE_USB.bat."
+        }
 
     private fun renderPayload(payload: ScannerPayload) {
         if (!payload.ok) {
@@ -4341,6 +4663,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         detectionOverlay.update(payload.boxes)
         val confidencePercent = (payload.confidence * 100).roundToInt()
         statsText.text = "${payload.detections} cells / $confidencePercent% confidence / ${if (payload.stable) "Stable" else "Scanning"}"
+        val quality = ScanQualityAnalyzer.analyze(
+            frame = null,
+            cells = RecognitionMetadataAssembler.fromBoxes(payload.boxes),
+            orientation = if (payload.inputFlippedHorizontal) ScanOrientation.FLIPPED else ScanOrientation.NORMAL
+        )
+        scanAdviceText.text = quality.recommendedAction
+            ?: "Capture quality looks usable. Review the text and detection image before sharing."
+        scanAdviceText.contentDescription = "Scan recommendation. ${scanAdviceText.text}"
         if (payload.text.isNotBlank()) {
             val recognized = payload.rawText.ifBlank { payload.text }.trim()
             lastOutput = recognized
@@ -4366,6 +4696,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 return
             }
         } else {
+            lastOutput = ""
             outputText.text = "Hold steady. No Braille detected yet."
             braillePreviewText.text = ""
         }
@@ -4593,6 +4924,250 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         shareText(lastOutput)
     }
 
+    private fun clearPendingTrainingContribution() {
+        runCatching { trainingContributionManager.clearPending() }
+        setContributionAvailable(false)
+        setAnnotatedResult(null)
+    }
+
+    private fun setContributionAvailable(available: Boolean) {
+        if (!::contributeSampleButton.isInitialized) return
+        contributeSampleButton.isEnabled = available
+        contributeSampleButton.alpha = if (available) 1f else 0.55f
+    }
+
+    private fun setAnnotatedResult(bitmap: Bitmap?) {
+        if (!::annotatedResultImage.isInitialized) {
+            bitmap?.recycle()
+            return
+        }
+        annotatedResultImage.setImageDrawable(null)
+        if (bitmap == null) {
+            annotatedResultImage.visibility = View.GONE
+            shareAnnotatedButton.isEnabled = false
+            shareAnnotatedButton.alpha = 0.55f
+        } else {
+            annotatedResultImage.setImageBitmap(bitmap)
+            annotatedResultImage.visibility = View.VISIBLE
+            shareAnnotatedButton.isEnabled = true
+            shareAnnotatedButton.alpha = 1f
+        }
+    }
+
+    private fun shareAnnotatedResult() {
+        if (!trainingContributionManager.hasPending()) {
+            toast("Scan a Braille image before sharing a detection image")
+            return
+        }
+        shareAnnotatedButton.isEnabled = false
+        shareAnnotatedButton.text = "Preparing..."
+        networkExecutor.execute {
+            val result = runCatching { trainingContributionManager.createAnnotatedImageExport() }
+            runOnUiThread {
+                shareAnnotatedButton.isEnabled = true
+                shareAnnotatedButton.text = "Share detection image"
+                result.onSuccess { file ->
+                    runCatching {
+                        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+                        startActivity(
+                            Intent.createChooser(
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "image/jpeg"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    putExtra(Intent.EXTRA_TEXT, lastOutput)
+                                    clipData = ClipData.newUri(contentResolver, "Sciobraille detection image", uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                },
+                                "Share detection image"
+                            )
+                        )
+                    }.onFailure { toast("No compatible sharing app is available") }
+                }.onFailure { toast("Could not create the detection image") }
+            }
+        }
+    }
+
+    private fun showTrainingContributionDialog() {
+        if (!trainingContributionManager.hasPending()) {
+            toast("Scan a Braille image before contributing")
+            setContributionAvailable(false)
+            return
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), 0)
+        }
+        content.addView(TextView(this).apply {
+            text = "Optional contribution\n\nSciobraille will create one ZIP containing the model-facing Braille image, predicted boxes, model output, your corrected English text, and app/model version. Nothing is sent automatically. You choose the sharing app and recipient.\n\nPrivate training is the default. Public dataset release requires a separate explicit choice and confirmation. Do not submit faces, identity documents, addresses, medical or school records, or other personal information."
+            setTextColor(ScioColors.TEXT)
+            textSize = 15f
+            setLineSpacing(0f, 1.2f)
+        })
+        content.addView(TextView(this).apply {
+            text = "Correct English text"
+            setTextColor(ScioColors.TEXT)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(18), 0, dp(6))
+        })
+        val correctedText = EditText(this).apply {
+            setText(lastOutput)
+            hint = "Type the exact text on the Braille page"
+            minLines = 2
+            setTextColor(ScioColors.TEXT)
+            setHintTextColor(ScioColors.MUTED)
+            background = rounded(ScioColors.SURFACE, ScioColors.OUTLINE, 1, 6)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            contentDescription = "Correct English ground truth text for this Braille image"
+        }
+        content.addView(correctedText, LinearLayout.LayoutParams(-1, -2))
+        val notes = EditText(this).apply {
+            hint = "Optional notes: lighting, distance, reverse-side Braille"
+            maxLines = 3
+            setTextColor(ScioColors.TEXT)
+            setHintTextColor(ScioColors.MUTED)
+            background = rounded(ScioColors.SURFACE, ScioColors.OUTLINE, 1, 6)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            contentDescription = "Optional scan condition notes"
+        }
+        content.addView(notes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+
+        content.addView(TextView(this).apply {
+            text = "Contribution visibility"
+            setTextColor(ScioColors.TEXT)
+            typeface = Typeface.DEFAULT_BOLD
+            textSize = 16f
+            setPadding(0, dp(18), 0, dp(6))
+        })
+        val privateScope = RadioButton(this).apply {
+            id = View.generateViewId()
+            text = "Private model contribution (recommended)\nMay be used for Sciobraille research, annotation, training, evaluation, and model distribution. The source package is not approved for a public dataset."
+            contentDescription = text
+            isChecked = true
+        }
+        val publicScope = RadioButton(this).apply {
+            id = View.generateViewId()
+            text = "Public dataset contribution\nThe image, corrected text, and reviewed annotations may later be published and reused by others, including for research and commercial model development."
+            contentDescription = text
+        }
+        val scopeGroup = RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+            addView(privateScope)
+            addView(publicScope)
+        }
+        content.addView(scopeGroup)
+
+        val contentConfirmation = CheckBox(this).apply {
+            text = "I confirm this image contains only Braille content that I am allowed to share and no sensitive personal information."
+            contentDescription = text
+        }
+        val ageConfirmation = CheckBox(this).apply {
+            text = "I am at least 18, or I am the parent, guardian, or authorized school representative submitting this sample."
+            contentDescription = text
+        }
+        val useConsent = CheckBox(this).apply {
+            text = "I voluntarily allow this sample to be used for Sciobraille research, annotation, model training, evaluation, and model distribution."
+            contentDescription = text
+        }
+        val publicReleaseConsent = CheckBox(this).apply {
+            text = "I separately agree that this image, corrected text, and reviewed annotations may be published in a publicly downloadable Braille dataset and reused by others, including for research and commercial model development."
+            contentDescription = text
+            visibility = View.GONE
+        }
+        content.addView(contentConfirmation)
+        content.addView(ageConfirmation)
+        content.addView(useConsent)
+        content.addView(publicReleaseConsent)
+
+        val scroll = ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Improve the Sciobraille model")
+            .setView(scroll)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Create and share", null)
+            .create()
+        dialog.setOnShowListener {
+            val positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            fun selectedScope(): ContributionPublicationScope =
+                if (publicScope.isChecked) ContributionPublicationScope.PUBLIC_DATASET
+                else ContributionPublicationScope.PRIVATE_TRAINING
+            fun updateEnabled() {
+                val scope = selectedScope()
+                publicReleaseConsent.visibility =
+                    if (scope == ContributionPublicationScope.PUBLIC_DATASET) View.VISIBLE else View.GONE
+                if (scope != ContributionPublicationScope.PUBLIC_DATASET) {
+                    publicReleaseConsent.isChecked = false
+                }
+                positive.isEnabled = ContributionConsentPolicy.canExport(
+                    correctedTextPresent = correctedText.text.toString().trim().isNotEmpty(),
+                    contentConfirmed = contentConfirmation.isChecked,
+                    authorizedConfirmed = ageConfirmation.isChecked,
+                    modelUseConfirmed = useConsent.isChecked,
+                    scope = scope,
+                    publicReleaseConfirmed = publicReleaseConsent.isChecked
+                )
+            }
+            val watcher = object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = updateEnabled()
+                override fun afterTextChanged(s: Editable?) = Unit
+            }
+            correctedText.addTextChangedListener(watcher)
+            contentConfirmation.setOnCheckedChangeListener { _, _ -> updateEnabled() }
+            ageConfirmation.setOnCheckedChangeListener { _, _ -> updateEnabled() }
+            useConsent.setOnCheckedChangeListener { _, _ -> updateEnabled() }
+            publicReleaseConsent.setOnCheckedChangeListener { _, _ -> updateEnabled() }
+            scopeGroup.setOnCheckedChangeListener { _, _ -> updateEnabled() }
+            updateEnabled()
+            positive.setOnClickListener {
+                val correctedValue = correctedText.text.toString()
+                val notesValue = notes.text.toString()
+                val publicationScope = selectedScope()
+                positive.isEnabled = false
+                positive.text = "Preparing..."
+                networkExecutor.execute {
+                    val result = runCatching {
+                        trainingContributionManager.createExport(
+                            correctedValue,
+                            notesValue,
+                            publicationScope
+                        )
+                    }
+                    runOnUiThread {
+                        dialog.dismiss()
+                        result.onSuccess(::shareTrainingContribution)
+                            .onFailure { toast("Could not create the contribution package") }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun shareTrainingContribution(export: ContributionExport) {
+        runCatching {
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", export.archive)
+            startActivity(
+                Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = "application/zip"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        putExtra(Intent.EXTRA_EMAIL, arrayOf("devajoel8@gmail.com"))
+                        putExtra(Intent.EXTRA_SUBJECT, "Sciobraille training contribution ${export.id}")
+                        putExtra(
+                            Intent.EXTRA_TEXT,
+                            "Voluntary Sciobraille model contribution ${export.id}. " +
+                                "Keep this ID if you need to request deletion of the stored source package."
+                        )
+                        clipData = ClipData.newUri(contentResolver, "Sciobraille contribution", uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    },
+                    "Share training contribution"
+                )
+            )
+        }.onFailure { toast("No compatible sharing app is available") }
+    }
+
     private fun speakText(value: String) {
         handleSpeechStatus(multilingualTtsManager.speakOriginal(value), AppLanguage.ENGLISH)
     }
@@ -4624,21 +5199,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             PackageManager.PERMISSION_GRANTED
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == CAMERA_PERMISSION_REQUEST &&
-            grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
-        ) {
-            startCamera()
-        } else {
-            frameOverlay.setStatus("Camera permission denied", false)
-        }
-    }
-
     override fun onDestroy() {
         stopScanning("Stopped")
         stopBraillePlayback()
@@ -4652,6 +5212,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         pendingStoryPhotoFile = null
         pendingBraillePhotoFile?.delete()
         pendingBraillePhotoFile = null
+        runCatching { trainingContributionManager.clearPending() }
+        runCatching { offlineBrailleDetector.closeIfOpened() }
         runCatching { storyTextRecognizer.close() }
         super.onDestroy()
     }
@@ -5007,6 +5569,19 @@ internal object BrailleOrientationSelector {
                 word.substring(index, index + 2) in commonEnglishBigrams
             }
         }
+
+    fun quality(text: String, detections: Int, confidence: Double): Double =
+        score(text) * 2.0 + confidence.coerceIn(0.0, 1.0) * 10.0 + detections.coerceIn(0, 80) * 0.05
+
+    fun preferAlternate(
+        primaryText: String,
+        primaryDetections: Int,
+        primaryConfidence: Double,
+        alternateText: String,
+        alternateDetections: Int,
+        alternateConfidence: Double
+    ): Boolean = quality(alternateText, alternateDetections, alternateConfidence) >
+        quality(primaryText, primaryDetections, primaryConfidence) + 0.25
 }
 
 private data class OfflineCandidate(
@@ -5223,19 +5798,37 @@ class OfflineBrailleDetector(private val context: Context) {
             }
         }
 
-    fun detect(frameFile: File): ScannerPayload {
+    fun warmUp() {
+        interpreter.getInputTensor(0)
+        interpreter.getOutputTensor(0)
+    }
+
+    fun detect(
+        frameFile: File,
+        sideMode: ScanSideMode = ScanSideMode.AUTOMATIC
+    ): ScannerPayload {
         val bitmap = BitmapFactory.decodeFile(frameFile.absolutePath)
             ?: return ScannerPayload(false, "", false, 0, 0.0, emptyList())
-        // Match the production backend: the captured frame is mirrored before inference.
-        // inferCandidate maps boxes back to the natural camera-preview coordinates.
-        val selected = inferCandidate(
-            bitmap,
-            mirroredInput = ScannerInputPolicy.FORCE_HORIZONTAL_FLIP
-        )
+        // inferCandidate maps mirrored model boxes back to natural preview coordinates.
+        val candidates = OfflineOrientationPolicy.candidates(sideMode)
+            .map { mirroredInput -> inferCandidate(bitmap, mirroredInput) }
+        val primary = candidates.first()
+        val selected = candidates.drop(1).fold(primary) { winner, candidate ->
+            if (BrailleOrientationSelector.preferAlternate(
+                    primaryText = winner.rawText,
+                    primaryDetections = winner.modelBoxes.size,
+                    primaryConfidence = winner.confidence,
+                    alternateText = candidate.rawText,
+                    alternateDetections = candidate.modelBoxes.size,
+                    alternateConfidence = candidate.confidence
+                )
+            ) candidate else winner
+        }
         bitmap.recycle()
         android.util.Log.d(
             "SciobrailleOffline",
-            "Model: ${BuildConfig.OFFLINE_MODEL_ASSET}, Forced mirror: ${selected.mirrored}, Kept: ${selected.modelBoxes.size}"
+            "Model: ${BuildConfig.OFFLINE_MODEL_ASSET}, Side mode: $sideMode, " +
+                "Mirror selected: ${selected.mirrored}, Kept: ${selected.modelBoxes.size}"
         )
         val (stableText, stable) = stabilize(selected.rawText)
         return ScannerPayload(
@@ -5246,7 +5839,9 @@ class OfflineBrailleDetector(private val context: Context) {
             confidence = selected.confidence,
             boxes = selected.displayBoxes,
             rawText = selected.rawText,
-            correctedText = selected.rawText
+            correctedText = selected.rawText,
+            sourceMode = "offline",
+            inputFlippedHorizontal = selected.mirrored
         )
     }
 
