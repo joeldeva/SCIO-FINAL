@@ -19,6 +19,9 @@ real-world scan practice.
 Key features:
 
 - Offline physical Braille scanner with camera and gallery input.
+- Automatic front/reverse-side recognition with saved recognition options.
+- Capture guidance, result recommendations, plain text, Unicode Braille, and
+  annotated detection images.
 - Audio-first Dot Explorer for the six Braille dot positions.
 - Grade 1 English Braille letter lessons from A to Z.
 - Letter recognition and word reading practice.
@@ -26,8 +29,9 @@ Key features:
 - Scan and Learn mode for real-world Braille practice.
 - Local offline progress, streaks, milestones, and certificates.
 - Private on-device scan history and learning progress.
-- Optional, consent-based model-improvement contribution packages. Scans are
-  never uploaded automatically.
+- Optional, consent-based model-improvement contribution packages with separate
+  private-training and public-dataset choices. Scans are never uploaded
+  automatically.
 
 Sciobraille is designed with accessibility in mind: large controls, TalkBack
 labels, spoken instructions, optional haptics, and local-first progress.

@@ -25,6 +25,10 @@ and annotations are intentionally excluded from Git.
 ## Rules
 
 - Never commit received user images or metadata to the public repository.
+- A `private_training` contribution must never be published as source data.
+- A `public_dataset` contribution is only eligible for later publication. It
+  still requires privacy review, annotation review, documented dataset terms,
+  and an explicit release decision before any source data becomes public.
 - Never merge quarantine directly into `master_v2`.
 - Preserve the contribution ID and consent version in private provenance.
 - Honor deletion requests for stored source packages using contribution ID.

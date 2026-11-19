@@ -1,19 +1,20 @@
 # Sciobraille Release Status
 
-Last updated: 17 November 2026
+Last updated: 19 November 2026
 
 ## Local Engineering Status
 
-- Version `1.2.1` (`versionCode 15`)
+- Version `1.3.0` (`versionCode 16`)
 - Package `com.sciobraille.scanner`
 - Target API 36, minimum API 26
 - Offline V2 TFLite scanner active for camera and gallery
-- Horizontal-flip evaluation and automatic orientation selection active
+- Saved automatic/front/reverse side recognition active
+- Accessible photo guidance, dynamic capture advice, and annotated result export active
 - Full local LMS enabled
 - Local history, progress, TTS, haptics, milestones, and certificates enabled
 - Cloud sync, public backend use, billing, accounts, and school dashboards disabled
-- Optional consent-based training contribution export enabled; automatic image
-  upload remains disabled
+- Optional consent-based contribution export enabled with separate private and
+  public-dataset scopes; automatic image upload remains disabled
 - Release signing configured outside Git
 - Unit tests passing
 - Release lint has zero errors
@@ -21,8 +22,8 @@ Last updated: 17 November 2026
 
 ## Current Artifacts
 
-- `releases/Sciobraille-1.2.1-offline-debug.apk`
-- `releases/Sciobraille-1.2.1-play.aab`
+- `releases/Sciobraille-1.3.0-offline-debug.apk`
+- `releases/Sciobraille-1.3.0-play.aab`
 
 See `releases/CHECKSUMS_SHA256.txt` and `docs/PLAY_RELEASE_HANDOFF.md`.
 

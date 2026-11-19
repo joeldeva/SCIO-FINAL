@@ -1,4 +1,4 @@
-# Sciobraille Play Data Safety - Version 1.2.1
+# Sciobraille Play Data Safety - Version 1.3.0
 
 Use these answers only for the offline Play build produced from this commit.
 Reassess them before enabling accounts, analytics, cloud sync, or a backend.
@@ -10,7 +10,8 @@ images, recognized text, scan history, learner profile, or LMS progress to the
 developer. Core recognition and learning run on the device.
 
 After a scan, the user may deliberately choose **Improve the model**, correct
-the ground-truth text, approve a dedicated three-part consent statement, and
+the ground-truth text, approve a dedicated consent statement, choose private
+training or public dataset scope, and
 share a contribution ZIP through Android's share sheet. The package contains
 the selected model-facing image, predicted boxes, raw model text, corrected
 text, optional notes, model/app metadata, random contribution ID, and consent
@@ -26,7 +27,9 @@ developer:
   improvement/research in the privacy policy and reviewer notes.
 - Processing: not ephemeral when the package is accepted for dataset review.
 - Sharing: no sale or advertising; transfer is initiated by the user through
-  Android's share sheet.
+  Android's share sheet. A public dataset contribution may later make the
+  reviewed image/text/annotations publicly available, but only after separate
+  public-release consent and project review.
 - Deletion: source contribution deletion can be requested by contribution ID.
 
 Google ML Kit can contact Google to download an optional translation model.
@@ -66,6 +69,7 @@ Users can clear local data in Android settings or uninstall the app.
 
 - Confirm the merged release manifest matches this document.
 - Confirm the public privacy URL includes the contribution section and is live.
-- Declare optional contribution photos/text consistently in Play Console.
+- Declare optional contribution photos/text and the optional public dataset
+  release consistently in Play Console.
 - Review the current Play Data Safety definitions in Play Console.
 - Re-run this assessment whenever dependencies or network behavior change.

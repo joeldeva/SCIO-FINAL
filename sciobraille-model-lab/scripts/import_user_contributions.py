@@ -24,7 +24,7 @@ from typing import Any
 from PIL import Image
 
 
-SCHEMA_VERSION = 1
+SUPPORTED_SCHEMA_VERSIONS = {1, 2}
 MAX_ARCHIVE_BYTES = 60 * 1024 * 1024
 MAX_IMAGE_BYTES = 50 * 1024 * 1024
 MAX_METADATA_BYTES = 1024 * 1024
@@ -38,6 +38,7 @@ MANIFEST_FIELDS = [
     "user_corrected_text",
     "detection_count",
     "consent_version",
+    "publication_scope",
     "review_status",
 ]
 
@@ -66,7 +67,8 @@ def validate_id(value: Any) -> str:
 
 
 def validate_metadata(metadata: dict[str, Any], image_data: bytes) -> None:
-    if metadata.get("schema_version") != SCHEMA_VERSION:
+    schema_version = metadata.get("schema_version")
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         raise ContributionError(f"unsupported schema_version: {metadata.get('schema_version')!r}")
     validate_id(metadata.get("contribution_id"))
     if metadata.get("image_file") != "image.jpg":
@@ -85,6 +87,14 @@ def validate_metadata(metadata: dict[str, Any], image_data: bytes) -> None:
     required_uses = {"manual_annotation", "model_training", "model_evaluation"}
     if not required_uses.issubset(uses):
         raise ContributionError("approved uses do not include annotation, training, and evaluation")
+    publication_scope = metadata.get("publication_scope", "private_training")
+    if publication_scope not in {"private_training", "public_dataset"}:
+        raise ContributionError("publication_scope is invalid")
+    if publication_scope == "public_dataset":
+        if consent.get("public_dataset_release") is not True:
+            raise ContributionError("public dataset scope requires explicit public release consent")
+        if "public_dataset_release" not in uses:
+            raise ContributionError("approved uses do not include public dataset release")
 
     boxes = metadata.get("predicted_boxes")
     if not isinstance(boxes, list):
@@ -151,6 +161,21 @@ def read_package(path: Path) -> tuple[dict[str, Any], bytes]:
 def append_manifest(manifest: Path, row: dict[str, Any]) -> None:
     manifest.parent.mkdir(parents=True, exist_ok=True)
     exists = manifest.exists() and manifest.stat().st_size > 0
+    if exists:
+        with manifest.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            existing_fields = reader.fieldnames or []
+            existing_rows = list(reader)
+        if existing_fields != MANIFEST_FIELDS:
+            temporary = manifest.with_suffix(manifest.suffix + ".tmp")
+            with temporary.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=MANIFEST_FIELDS)
+                writer.writeheader()
+                writer.writerows(
+                    {key: existing_row.get(key, "") for key in MANIFEST_FIELDS}
+                    for existing_row in existing_rows
+                )
+            temporary.replace(manifest)
     with manifest.open("a", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=MANIFEST_FIELDS)
         if not exists:
@@ -189,6 +214,8 @@ def import_package(
                 {
                     "status": "needs_privacy_and_annotation_review",
                     "approved_for_training": False,
+                    "approved_for_public_dataset": False,
+                    "publication_scope": metadata.get("publication_scope", "private_training"),
                     "reviewer": "",
                     "reviewed_at_utc": "",
                     "notes": "Predicted boxes are not ground truth.",
@@ -209,6 +236,7 @@ def import_package(
                 "user_corrected_text": metadata.get("user_corrected_text", ""),
                 "detection_count": metadata.get("detection_count", 0),
                 "consent_version": metadata.get("consent", {}).get("version", ""),
+                "publication_scope": metadata.get("publication_scope", "private_training"),
                 "review_status": "needs_privacy_and_annotation_review",
             },
         )

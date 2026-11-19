@@ -10,8 +10,10 @@
 ## Offline Release Architecture
 
 - The normal debug and release variants use bundled `best_int8.tflite`.
-- Camera and gallery scans run on-device after horizontal-flip evaluation.
-- The natural orientation is also evaluated and selected only when stronger.
+- Camera and Photo Picker scans run on-device.
+- Automatic mode evaluates natural and horizontally mirrored orientation and
+  selects the stronger raw result. Front-only and reverse-only defaults are
+  also available.
 - Room and SharedPreferences store progress and history locally.
 - FastAPI and LMS sync endpoints are not called by the Play release.
 - Keep all LMS backend routes private until real authentication exists.
@@ -40,6 +42,8 @@
 - Cloud sync, school dashboards, reports, premium billing, and public accounts are disabled.
 - Optional model contributions require transcript review and explicit consent;
   no scanner image is uploaded automatically.
+- Public dataset release requires a separate explicit scope and confirmation;
+  private model contribution remains the default.
 - Publish the offline privacy policy from repository `/docs` with GitHub Pages.
 - Use `PRIVACY_POLICY_DRAFT.md` as the starting text.
 - Use `DATA_SAFETY.md` for the Play Console data safety form.

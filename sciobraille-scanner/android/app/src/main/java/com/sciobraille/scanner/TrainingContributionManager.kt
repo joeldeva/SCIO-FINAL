@@ -3,7 +3,12 @@ package com.sciobraille.scanner
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -14,8 +19,8 @@ import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-private const val CONTRIBUTION_SCHEMA_VERSION = 1
-const val CONTRIBUTION_CONSENT_VERSION = "2026-11-17-v1"
+private const val CONTRIBUTION_SCHEMA_VERSION = 2
+const val CONTRIBUTION_CONSENT_VERSION = "2026-11-19-v2"
 private const val EXPORT_MAX_AGE_MS = 24L * 60L * 60L * 1000L
 
 internal object ContributionGeometry {
@@ -91,7 +96,31 @@ class TrainingContributionManager(private val context: Context) {
     }
 
     @Synchronized
-    fun createExport(correctedText: String, notes: String): ContributionExport {
+    fun createAnnotatedPreview(maxDimension: Int = 1_280): Bitmap? {
+        val source = pending?.takeIf { it.image.isFile } ?: return null
+        return renderAnnotatedImage(source, maxDimension)
+    }
+
+    @Synchronized
+    fun createAnnotatedImageExport(): File {
+        val source = pending?.takeIf { it.image.isFile }
+            ?: error("No processed scan is available")
+        val bitmap = renderAnnotatedImage(source, 2_048)
+            ?: error("Could not create annotated image")
+        val output = File(root, "sciobraille-annotated-${System.currentTimeMillis()}.jpg")
+        FileOutputStream(output).use { stream ->
+            check(bitmap.compress(Bitmap.CompressFormat.JPEG, 94, stream))
+        }
+        bitmap.recycle()
+        return output
+    }
+
+    @Synchronized
+    fun createExport(
+        correctedText: String,
+        notes: String,
+        publicationScope: ContributionPublicationScope
+    ): ContributionExport {
         val source = pending?.takeIf { it.image.isFile }
             ?: error("No processed scan is available")
         val groundTruth = correctedText.trim().take(2_000)
@@ -128,6 +157,7 @@ class TrainingContributionManager(private val context: Context) {
             put("input_flipped_horizontal", source.payload.inputFlippedHorizontal)
             put("coordinate_space", "normalized_model_facing_image")
             put("requires_manual_box_review", true)
+            put("publication_scope", publicationScope.metadataValue)
             put("predicted_boxes", JSONArray().apply {
                 modelBoxes.forEach { box ->
                     put(JSONObject().apply {
@@ -146,13 +176,17 @@ class TrainingContributionManager(private val context: Context) {
                 put("affirmative", true)
                 put("adult_or_authorized_representative", true)
                 put("no_sensitive_content_confirmed", true)
-                put("approved_uses", JSONArray(listOf(
-                    "research",
-                    "manual_annotation",
-                    "model_training",
-                    "model_evaluation",
-                    "model_distribution"
-                )))
+                put("public_dataset_release", publicationScope == ContributionPublicationScope.PUBLIC_DATASET)
+                put("approved_uses", JSONArray(buildList {
+                    add("research")
+                    add("manual_annotation")
+                    add("model_training")
+                    add("model_evaluation")
+                    add("model_distribution")
+                    if (publicationScope == ContributionPublicationScope.PUBLIC_DATASET) {
+                        add("public_dataset_release")
+                    }
+                }))
             })
         }
 
@@ -165,7 +199,8 @@ class TrainingContributionManager(private val context: Context) {
             zip.closeEntry()
             zip.putNextEntry(ZipEntry("README.txt"))
             zip.write(
-                "Sciobraille voluntary training contribution $id\n".toByteArray(Charsets.UTF_8)
+                ("Sciobraille voluntary contribution $id\n" +
+                    "Publication scope: ${publicationScope.metadataValue}\n").toByteArray(Charsets.UTF_8)
             )
             zip.closeEntry()
         }
@@ -181,8 +216,65 @@ class TrainingContributionManager(private val context: Context) {
 
     private fun pruneExpiredExports(now: Long = System.currentTimeMillis()) {
         root.listFiles()
-            ?.filter { it.extension.equals("zip", ignoreCase = true) && now - it.lastModified() > EXPORT_MAX_AGE_MS }
+            ?.filter {
+                val disposableExport = it.extension.equals("zip", ignoreCase = true) ||
+                    (it.extension.equals("jpg", ignoreCase = true) && it.name.startsWith("sciobraille-annotated-"))
+                disposableExport && now - it.lastModified() > EXPORT_MAX_AGE_MS
+            }
             ?.forEach(File::delete)
+    }
+
+    private fun renderAnnotatedImage(source: PendingContribution, maxDimension: Int): Bitmap? {
+        val decoded = BitmapFactory.decodeFile(source.image.absolutePath) ?: return null
+        val scale = minOf(1f, maxDimension.toFloat() / maxOf(decoded.width, decoded.height).toFloat())
+        val width = (decoded.width * scale).toInt().coerceAtLeast(1)
+        val height = (decoded.height * scale).toInt().coerceAtLeast(1)
+        val output = Bitmap.createScaledBitmap(decoded, width, height, true)
+            .copy(Bitmap.Config.ARGB_8888, true)
+        if (decoded !== output) decoded.recycle()
+
+        val stroke = (maxOf(width, height) * 0.004f).coerceIn(3f, 10f)
+        val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(0, 180, 90)
+            style = Paint.Style.STROKE
+            strokeWidth = stroke
+        }
+        val labelSize = (maxOf(width, height) * 0.035f).coerceIn(24f, 60f)
+        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = labelSize
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        val labelBackground = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(215, 0, 90, 55)
+            style = Paint.Style.FILL
+        }
+        val boxes = ContributionGeometry.modelFacingBoxes(
+            source.payload.boxes,
+            source.payload.inputFlippedHorizontal
+        )
+        Canvas(output).apply {
+            boxes.forEach { box ->
+                val rect = RectF(
+                    box.x1.coerceIn(0f, 1f) * width,
+                    box.y1.coerceIn(0f, 1f) * height,
+                    box.x2.coerceIn(0f, 1f) * width,
+                    box.y2.coerceIn(0f, 1f) * height
+                )
+                drawRect(rect, boxPaint)
+                val label = "${box.label} ${(box.confidence * 100).toInt()}%"
+                val textWidth = labelPaint.measureText(label)
+                val labelTop = (rect.top - labelSize - stroke).coerceAtLeast(0f)
+                drawRoundRect(
+                    RectF(rect.left, labelTop, rect.left + textWidth + stroke * 3, labelTop + labelSize + stroke),
+                    stroke,
+                    stroke,
+                    labelBackground
+                )
+                drawText(label, rect.left + stroke, labelTop + labelSize * 0.82f, labelPaint)
+            }
+        }
+        return output
     }
 
     private fun sha256(file: File): String = FileInputStream(file).use(::sha256)

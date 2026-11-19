@@ -1,9 +1,9 @@
 # Sciobraille Privacy Policy Source
 
-Effective date: 17 November 2026
+Effective date: 19 November 2026
 
 The publishable policy is maintained at `../../docs/privacy-policy.html` and is
-linked inside the Android About screen. Version 1.2.1 is offline-first:
+linked inside the Android About screen. Version 1.3.0 is offline-first:
 
 - Braille recognition runs with the bundled V2 TFLite model.
 - Camera frames and selected Braille images are never uploaded automatically.
@@ -20,6 +20,10 @@ linked inside the Android About screen. Version 1.2.1 is offline-first:
   after the user reviews the transcript and provides dedicated affirmative
   consent. The ZIP includes the model-facing image and training metadata, and
   remains offline until the user chooses a recipient through Android sharing.
+- Private model improvement is selected by default. A contribution is eligible
+  for a future publicly downloadable research dataset only when the user
+  separately selects **Public dataset contribution** and confirms public
+  release. Eligibility does not bypass privacy, annotation, or release review.
 
 Support contact: `devajoel8@gmail.com`
 

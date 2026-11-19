@@ -36,26 +36,31 @@ The backend is retained for model engineering and `v2Test` builds. The Play rele
 - `WS /ws/scan`
 - `POST /api/translate`
 
-The Android scanner always evaluates a horizontally mirrored frame locally. It
-also evaluates natural orientation and selects it only when its confidence and
-text structure clearly beat the mirrored result. No public image-flipping site
-or Sciobraille server receives camera data.
+The Android scanner supports saved page-side defaults: **Automatic (both
+sides)**, **Front side only**, and **Reverse side only**. Automatic evaluates a
+horizontally mirrored frame and the natural frame locally, then keeps the
+stronger raw reading. No public image-flipping site or Sciobraille server
+receives camera data.
 
 Final V2 mobile inference uses confidence `0.25`, class-agnostic duplicate IoU
 `0.70`, 640x640 letterbox preprocessing, and the canonical `a-z` class order.
 A Scan tap captures one frame immediately, runs on-device inference, displays
 one final result, and stops automatically. Tap Scan again for a new result.
 
-The compact **Photo** action can capture through the camera or choose an image
-from the device. Both paths use the same on-device orientation and recognition
-pipeline.
+The **Photo** action can capture through the camera or choose one image with
+Android Photo Picker. Both paths use the same on-device orientation and
+recognition pipeline. **Photo tips** explains lighting, framing, focus, and
+common capture mistakes. Results include plain text, Unicode Braille, an
+annotated detection image, copy/share actions, TTS, and scan-specific advice.
 
 ### Voluntary Training Contributions
 
 After a processed scan, **Improve the model** lets an adult or authorized
 representative review the exact English text and optionally describe scan
-conditions. A contribution is packaged locally only after explicit consent.
-Nothing is uploaded automatically; Android's share sheet controls transfer.
+conditions. Private model improvement is the default scope. Public dataset
+release requires a separate explicit selection and confirmation. A
+contribution is packaged locally only after consent. Nothing is uploaded
+automatically; Android's share sheet controls transfer.
 
 Received ZIPs must be validated with
 `sciobraille-model-lab/scripts/import_user_contributions.py`. They enter a
@@ -123,11 +128,11 @@ The six-level LMS unlock path remains unchanged. **Today's Practice** uses persi
 
 Lessons, scores, milestones, certificates, and progress are stored locally in
 Room. Scanner recognition also runs locally. Cloud LMS synchronization is
-disabled in version 1.2.1.
+disabled in version 1.3.0.
 
 ### Premium And School Readiness
 
-The complete local curriculum is unlocked in version 1.2.1. The account,
+The complete local curriculum is unlocked in version 1.3.0. The account,
 premium, school dashboard, and report contracts remain future architecture and
 are not enabled in the Play release.
 
@@ -139,8 +144,8 @@ LMS controls use text labels, TalkBack descriptions, TTS, optional haptics, and 
 
 ## Verified Artifacts
 
-- Debug APK: `releases/Sciobraille-1.2.1-offline-debug.apk`
-- Signed release AAB: `releases/Sciobraille-1.2.1-play.aab`.
+- Debug APK: `releases/Sciobraille-1.3.0-offline-debug.apk`
+- Signed release AAB: `releases/Sciobraille-1.3.0-play.aab`.
 
 The release manifest uses `android:usesCleartextTraffic="false"`.
 
@@ -148,7 +153,7 @@ The release manifest uses `android:usesCleartextTraffic="false"`.
 
 Current integrated verification:
 
-- Android unit tests: 39 passed.
+- Android unit tests: 43 passed.
 - Backend tests: 31 passed.
 - Debug APK build: passed.
 - Signed Play AAB build and signature verification: passed.
@@ -184,7 +189,7 @@ Backend verification:
 ## Before Play Upload
 
 - Publish `docs/privacy-policy.html` using GitHub Pages and use its URL in Play Console.
-- Upload `releases/Sciobraille-1.2.1-play.aab` to Play internal testing.
+- Upload `releases/Sciobraille-1.3.0-play.aab` to Play internal testing.
 
 Production notes:
 
